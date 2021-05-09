@@ -1,12 +1,22 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
-    <title>Chris Turner</title>
+    <title>Trevor F. Freeman</title>
     <link>/</link>
-    <description>Recent content on Chris Turner</description>
+    <description>Recent content on Trevor F. Freeman</description>
     <generator>Hugo -- gohugo.io</generator>
     <language>en-US</language>
-    <lastBuildDate>Sat, 08 May 2021 00:00:00 +0000</lastBuildDate><atom:link href="/index.xml" rel="self" type="application/rss+xml" />
+    <lastBuildDate>Sun, 09 May 2021 00:00:00 +0000</lastBuildDate><atom:link href="/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>Python post for the project</title>
+      <link>/post/2021/05/09/python-post-for-the-project/</link>
+      <pubDate>Sun, 09 May 2021 00:00:00 +0000</pubDate>
+      
+      <guid>/post/2021/05/09/python-post-for-the-project/</guid>
+      <description>Introduction I’ve run Python code in a Jupyter notebook many times, but I wasn’t aware that it could be run within an Rmarkdown file. Not only is it possible to knit Python code in an Rmarkdown file, but you can actually make R and Python play together. I’m going to show off just a little bit of that here but keep it pretty simple.
+ Running python code in an Rmarkdown file Then, to run Python code it’s as simple as making a python code chunk (using {python}) and run your code.</description>
+    </item>
+    
     <item>
       <title>Nonsense post</title>
       <link>/post/2021/05/08/nonsense-post/</link>
@@ -55,15 +65,6 @@ summary(cars) ## speed dist ## Min. : 4.0 Min. : 2.00 ## 1st Qu.:12.0 1st Qu.: 2
  Wrangling &amp;amp; Exploratory Data Analysis
  Modeling, Inference, Prediction
   -- </description>
-    </item>
-    
-    <item>
-      <title>Resume</title>
-      <link>/resume/</link>
-      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
-      
-      <guid>/resume/</guid>
-      <description>    </description>
     </item>
     
   </channel>
