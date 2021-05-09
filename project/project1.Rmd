@@ -1,0 +1,232 @@
+---
+title: 'Project 1: Exploratory Data Analysis'
+author: "SDS348"
+date: ''
+output:
+  html_document:
+    toc: yes
+    toc_float:
+      collapsed: no
+      smooth_scroll: yes
+  pdf_document:
+    toc: no
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, eval = TRUE, fig.align = "center", warning = F, message = F,
+tidy=TRUE, tidy.opts=list(width.cutoff=60), R.options=list(max.print=100))
+```
+
+## Data Wrangling and Data Exploration
+
+### 0. Introduction
+
+*Ribosomes, the protein factories of the cell, are composed largely of RNA which is transcribed from ribosomal DNA (rDNA) repeat arrays. The nucleolus, the largest nuclear body, forms around these rDNA repeats. Aside from being the site of the initial steps of ribosome biogenesis, the nucleolus is hypothesized to function in organizing the genome in 3D space. One of these organizing structures of DNA is the genomic loci that contact the nucleolus, called nucleolus associated domains (NADs). These have been identified in several model organisms but have not been interrogated in the nematode Caenorhabditis elegans. My thesis project is focused around elucidating the role of the nucleolus in genome organization using C. elegans as a model organism, so the existence and identity of NADs is an important part of my research. NADs are classically identified by sequencing DNA that are associated with biochemically purified nucleoli, but they can also be approximated by analyzing chromatin conformation capture (Hi-C) data for genomic loci that contact the rDNA locus.*
+
+*For this project, I have four datasets of previously published C. elegans Hi-C data for which I have extracted the Knight-Ruiz (KR) normalized observed/expected contact scores between rDNA and all genomic loci at a binsize of 10kb. These data are in bedGraph format, a standard format that contains the following variables: chromosome, start coordinate, end coordinate, and score. There are two biological replicates, and because of the size of the raw sequence read files, each replicate is split into two files. I am interested in attempting to identify C. elegans NADs using this Hi-C data. If NADs exist in this animal, they should be present in both replicates and in the two datasets of each replicate. Thus, I am interested in interrogating the correlations between these datasets and attempting to identify regions of high contacts with the rDNA.*
+
+```{r}
+library(tidyverse)
+library(kableExtra)
+library(RColorBrewer)
+library(cluster)
+```
+
+```{r}
+column_names <- c('chr', 'start', 'end', 'score')
+
+rep1.1 <- read_tsv('~/personal/projects/project1/data/aligned_SRR9286043_GSM3884598/inter_30_chrI-15060000-15060000_all_oe_KR_10000.bedGraph',
+                    col_names = column_names)
+rep1.2 <- read_tsv('~/personal/projects/project1/data/aligned_SRR9286044_GSM3884598/inter_30_chrI-15060000-15060000_all_oe_KR_10000.bedGraph',
+                    col_names = column_names)
+
+rep2.1 <- read_tsv('~/personal/projects/project1/data/aligned_SRR9286045_GSM3884599/inter_30_chrI-15060000-15060000_all_oe_KR_10000.bedGraph',
+                   col_names = column_names)
+rep2.2 <- read_tsv('~/personal/projects/project1/data/aligned_SRR9286046_GSM3884599/inter_30_chrI-15060000-15060000_all_oe_KR_10000.bedGraph',
+                   col_names = column_names)
+```
+    
+### 1. Joining/Merging/Tidying
+
+*I joined all of the datasets using a full join because I did not want to drop any datapoints. The datasets were joined by merging regions at identical genomic loci, i.e. same chromosome, start, and end coordinates. I replaced `NA` with `0` to not lose any potentially meaningful loci from other datasets. I think this is exceptable because an `NA` after a join is reasonably a contact score of `0`.*
+
+```{r joining}
+joint_wide <-
+  rep1.1 %>%
+  full_join(rep1.2,
+            suffix = c('.rep1.1', '.rep1.2'),
+            by = column_names[1:3]) %>%
+  full_join(rep2.1,
+            by = column_names[1:3]) %>%
+  full_join(rep2.2,
+            suffix = c('.rep2.1', '.rep2.2'),
+            by = column_names[1:3]) %>%
+  arrange(chr, start) %>%
+  mutate_all(funs(replace_na(., 0)))
+```
+
+*The joined dataset was tidied using `pivot_longer`. This was done so that all contact scores would be in a single variable and to add a variable for replicate and the dataset. The replicate and dataset were separated to facilitate summary statistics for the replicates without being split by dataset, but the dataset information is still potentially useful for later steps. The datasets were also modified to differentiate between datasets belonging to replicate 1 and datasets belonging to replicate 2: the simple 1 vs 2 encoding of these could lead to confusion.*
+
+```{r tidying}
+joint_long <-
+  joint_wide %>%
+  pivot_longer(starts_with('score'), names_to = 'replicate.dataset', names_prefix = 'score.',
+               values_to = 'score') %>%
+  mutate(replicate.dataset = case_when(replicate.dataset == 'rep1.1' ~ 'rep1.1',
+                                       replicate.dataset == 'rep1.2' ~ 'rep1.2',
+                                       replicate.dataset == 'rep2.1' ~ 'rep2.3',
+                                       replicate.dataset == 'rep2.2' ~ 'rep2.4')) %>%
+  separate(replicate.dataset, into = c('replicate', 'dataset'), sep = "\\.") %>%
+  mutate(dataset = factor(dataset, levels = c(1, 2, 3, 4)))
+```
+
+### 2. Wrangling
+
+*Summary statistics (mean, median, max, standard deviation, variance, and interquartile range) were computed for contact scores of both datasets of both replicates. This was first performed for all observations genome-wide. These statistics show that the genome-wide contact scores for replicate 1 tend to be higher on average than those for replicate 2. Replicate 1 is also more variable than replicate 2. Although both datasets for replicate 2 had similar mean and median values, replicate 2 dataset 1 was more variable than replicate 2 dataset 2. Next, summary statistics were calculated for contact scores grouped by chromosomes. The summary statistics do not seem to be biased toward any one chromosome, and the same patterns from the genome-wide statistics seem to hold largely true here..*
+
+```{r summarize all variables}
+joint_wide %>%
+  summarize_at(vars(score.rep1.1:score.rep2.2), list(mean = mean, median = median, max = max, sd = sd, var = var, IQR = IQR)) %>%
+  kbl() %>%
+  kable_styling(fixed_thead = T, font_size = 10, position = 'left', full_width = F, bootstrap_options = c('striped', 'responsive', 'condensed'))
+```
+
+```{r summarize group by chr}
+joint_wide %>%
+  group_by(chr) %>%
+  summarize_at(vars(score.rep1.1:score.rep2.2), list(mean = mean, median = median, max = max, sd = sd, var = var, IQR = IQR)) %>%
+  kbl() %>%
+  kable_styling(fixed_thead = T, font_size = 10, position = 'left', full_width = F, bootstrap_options = c('striped', 'responsive', 'condensed'))
+```
+
+*Summary statistics (mean, median, max, standard deviation, variance, and interquartile range) were computed for contact scores of both datasets of both replicates. I determined whether each locus was at the chromosome arm or center as these may have differential contacts with the rDNA. The mean value for each replicate was also calculated. Bins with an average contact score of 0 were removed, and summary statistics data grouped by chromosome and the localization within the arm or center were computed. There isn't much of a difference between the arm and center contact scores for each chromosome.*
+
+```{r summarize using 6 dplyr verbs}
+joint_wide %>%
+  group_by(chr) %>%
+  mutate(class = ifelse(end >= max(end)/3 & end >= max(end)/3, 'center', 'arm')) %>%
+  select(!c(start, end)) %>%
+  rowwise() %>%
+  mutate(score.rep1 = mean(c(score.rep1.1, score.rep1.2))) %>%
+  rowwise() %>%
+  mutate(score.rep2 = mean(c(score.rep2.1, score.rep2.2))) %>%
+  filter(score.rep1 > 0 | score.rep2 > 0) %>%
+  group_by(chr, class) %>%
+  summarize_at(vars(score.rep1.1:score.rep2.2, score.rep1, score.rep2),
+               list(mean = mean, median = median, max = max, sd = sd, var = var, IQR = IQR)) %>%
+  arrange(chr, class) %>%
+  kbl() %>%
+  kable_styling(fixed_thead = T, font_size = 10, position = 'left', full_width = F, bootstrap_options = c('striped', 'responsive', 'condensed'))
+```
+
+### 3. Visualizing
+
+```{r correlation heatmap}
+joint_wide %>%
+  select(starts_with('score')) %>%
+  cor(use = 'pair') %>%
+  as.data.frame() %>%
+  rownames_to_column('var1') %>%
+  pivot_longer(-1, names_to = 'var2', values_to = 'correlation') %>%
+  ggplot(aes(x = var1, y = var2, fill = correlation)) +
+  geom_tile() +
+  scale_fill_gradient2(low = 'red', mid = 'white', high = 'blue') +
+  geom_text(aes(label = round(correlation, 2)), color = "black", size = 4) +
+  theme(axis.text.x = element_text(angle = 90, hjust=1)) +
+  theme_bw() +
+  coord_fixed() +
+  labs(title = 'Correlation of Contact Scores', x = '', y = '')
+```
+
+*Correlations between datasets were plotted. Correlations between all datasets are positive. However, the correlations are very low, perhaps much more so than would be expected between replicates. Interestingly, the correlation between datasets within the same replicates are much lower than expected, especially for replicate 2.*
+    
+```{r violin plots}
+joint_long %>%
+  ggplot(aes(x = dataset, y = score, color = replicate)) +
+  geom_violin() +
+  stat_summary(fun.data = 'mean_sdl', mult = 1, geom = 'pointrange') +
+  theme_bw() +
+  labs(title = 'Distribution of Contact Scores', subtitle = 'rDNA vs. All',
+       x = 'Replicate and dataset', y = 'rDNA contact score') +
+  scale_color_brewer(palette = 'Paired') +
+  scale_y_continuous(breaks = seq(0, 20, 2.5))
+```
+
+*Violin plots were generated for each replicate and each dataset. Summary statistics of mean +/- one standard deviation are also plotted. All datasets are positively skewed. As expected from the summary statistics, the datasets are similar within replicates, but replicate 1 has a consistently higher contact score than replicate 2. Dataset 3 looks like it is potentially bimodal.*
+
+```{r rep2 avg vs rep1 avg}
+joint_wide %>%
+  rowwise() %>%
+  mutate(rep1_avg = mean(c(score.rep1.1, score.rep1.2))) %>%
+  rowwise() %>%
+  mutate(rep2_avg = mean(c(score.rep2.1, score.rep2.2))) %>%
+  ggplot(aes(x = rep1_avg, y = rep2_avg)) +
+  geom_point(aes(color = chr), alpha = 0.1) +
+  geom_smooth(method=lm, se=FALSE) +
+  lims(x = c(0, 20), y = c(0, 20)) +
+  coord_fixed() +
+  theme_bw() +
+  labs(title = 'rDNA Contacts', subtitle = 'rDNA vs. All',
+       x = 'Contact score - Replicate 1', y = 'Contact score - Replicate 2') +
+  scale_color_brewer(palette = 'Set3')
+```
+
+*Average contact scores for each bin were compared across replicates and colored by chromosome. As expected from the summary statistics, correlation plot, and the violin plot, there is a bias toward replicate 1. The positive correlation between the average contact scores of these replicates is weak.*
+
+### 4. Dimensionality Reduction - PAM Clustering
+    
+```{r}
+joint_clust <-
+  joint_wide %>%
+  select(starts_with('score')) %>%
+  scale %>%
+  glimpse()
+
+# sil_width<-vector()
+# 
+# for(i in 2:5){
+#   pam_fit <- pam(joint_clust, k = i)
+#   sil_width[i] <- pam_fit$silinfo$avg.width
+# }
+# 
+# ggplot() +
+#   geom_line(aes(x=1:5,y=sil_width)) +
+#   scale_x_continuous(name="k",breaks=1:5)
+```
+
+*Silhouette width vs. k took a very long time to run. In the interest of time, I am commenting out the code and adding an image of the plot here so that the document does not take forever to knit.*
+
+![Silhouette width vs. k](~/personal/projects/project1/silhouette_width.png)
+
+```{r}
+pam1 <-
+  joint_clust %>%
+  pam(2)
+```
+
+```{r}
+pamclust <-
+  joint_wide %>%
+  mutate(cluster = as.factor(pam1$clustering))
+
+pamclust %>%
+  ggplot(aes(x = score.rep1.1, y = score.rep1.2, color = cluster)) +
+  geom_point()
+
+pamclust %>%
+  ggplot(aes(x = score.rep2.1, y = score.rep2.2, color = cluster)) +
+  geom_point()
+
+pamclust %>%
+  ggplot(aes(x = score.rep1.1, y = score.rep2.1, color = cluster)) +
+  geom_point()
+```
+
+*I performed PAM clustering for dimensionality reduction. I chose two clusters since there is a pretty steep dropoff of silhouette width from 2 to fewer clusters. Only 2 to 5 clusters were tested for silhouette since the datasets are so large - any more took a prohibitively long time to run. The average silhouette width was low, around 0.23. This is very low and indicates that there is not a substantial underlying structure that has been found by the clustering analysis. Visualizing the clusters seems like I have only managed to differentiate the data based on whether they have a high or low contact score in replicate 1. The goodness-of-fit is poor enough that not much more can be taken from this clustering analysis.*
+
+```{r eval=F}
+## paste this chunk into the ```{r setup} chunk at the top of your project 1 .Rmd file
+
+knitr::opts_chunk$set(echo = TRUE, eval = TRUE, fig.align = "center", warning = F, message = F,
+tidy=TRUE, tidy.opts=list(width.cutoff=60), R.options=list(max.print=100))
+```

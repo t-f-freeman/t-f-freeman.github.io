@@ -1,0 +1,462 @@
+---
+title: 'Project 2: Modeling, Testing, and Predicting'
+author: "SDS348"
+date: ''
+output:
+  html_document:
+    toc: yes
+    toc_float:
+      collapsed: no
+      smooth_scroll: yes
+---
+
+```{r setup, include=FALSE}
+library(knitr)
+hook_output = knit_hooks$get('output')
+knit_hooks$set(output = function(x, options) {
+  # this hook is used only when the linewidth option is not NULL
+  if (!is.null(n <- options$linewidth)) {
+    x = knitr:::split_lines(x)
+    # any lines wider than n should be wrapped
+    if (any(nchar(x) > n)) x = strwrap(x, width = n)
+    x = paste(x, collapse = '\n')
+  }
+  hook_output(x, options)
+})
+
+knitr::opts_chunk$set(echo = TRUE, eval = TRUE,fig.align="center",warning=FALSE,message=FALSE,fig.width=8, fig.height=5, linewidth=60)
+options(tibble.width = 100,width = 100)
+library(tidyverse)
+
+# classification diagnostics
+class_diag<-function(probs,truth){
+  
+  tab<-table(factor(probs>.5,levels=c("FALSE","TRUE")),truth)
+  acc=sum(diag(tab))/sum(tab)
+  sens=tab[2,2]/colSums(tab)[2]
+  spec=tab[1,1]/colSums(tab)[1]
+  ppv=tab[2,2]/rowSums(tab)[2]
+
+  if(is.numeric(truth)==FALSE & is.logical(truth)==FALSE) truth<-as.numeric(truth)-1
+  
+  #CALCULATE EXACT AUC
+  ord<-order(probs, decreasing=TRUE)
+  probs <- probs[ord]; truth <- truth[ord]
+  
+  TPR=cumsum(truth)/max(1,sum(truth)) 
+  FPR=cumsum(!truth)/max(1,sum(!truth))
+  
+  dup<-c(probs[-1]>=probs[-length(probs)], FALSE)
+  TPR<-c(0,TPR[!dup],1); FPR<-c(0,FPR[!dup],1)
+  
+  n <- length(TPR)
+  auc<- sum( ((TPR[-1]+TPR[-n])/2) * (FPR[-1]-FPR[-n]) )
+
+  data.frame(acc,sens,spec,ppv,auc)
+}
+```
+
+# Modeling
+
+```{r load packages}
+library(tidyverse)
+library(lmtest)
+library(kableExtra)
+library(plotROC)
+library(glmnet)
+library(sandwich)
+```
+
+## Data import and descriptions
+
+The dataset I am working with is an imaging dataset that I generated myself. I imaged nuclei in the model organism *C. elegans* of two genotypes: *rDNA* deletion heterozygotes (*rDNA$\Delta$/+*) and homozygotes (*rDNA$\Delta$/$\Delta$*). The purpose of the experiment is to determine the effect of deletion of *rDNA* upon organization of chromatin and the nucleolus to test my overall hypothesis that the *rDNA* locus contributes to the overall architecture of the genome and the nucleolus. Images were acquired by fluorescent confocal microscopy of z-stacks in three channels for three different markers: DAPI stains DNA, DAO-5::GFP localizes to the nucleolus, and mCherry::H2B is present in *rDNA$\Delta$/+* but not *rDNA$\Delta$/$\Delta$*.
+
+The data was acquired by an algorithm that identified nuclei from the background based on DAPI staining. Once the nuclei were identified, shape and intensity values for each nucleus and each channel were computed. The dataset contains $506$ observations of $28$ variables. Each observation contains data for a single focal plane of a single nucleus. The first two variables contain information about the worm's genotpype (*rDNA$\Delta$* homozygous or heterozygous) and the focal plane's relative position within the stack (low, medium, or high). The next eight variables contain information about the shape of the nucleus and contain the prefix `shape.`. These include: Area, Major and Minor axis length, Angle, Circularity, Aspect Ratio, Roundness, and Solidity. The final six variables describe six intensity measurements for each of the three channels (DAPI, GFP, mCherry) including: Mean, Standard Deviation, Minimum, Maximum, Integrated Density, and Median.
+
+```{r data import}
+data <- read_csv('~/personal/projects/project2/imaging_data.csv')
+
+data <-
+  data %>%
+  select(-X1, -worm, -Slice, -starts_with('RawIntDen'))
+
+data %>%
+  head(n = 5) %>%
+  kbl(caption = 'Data') %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed")) %>%
+  scroll_box(width = '100%', height = '100%')
+```
+
+### Hypothesis testing
+
+#### MANOVA, ANOVAs, and t tests
+
+A MANOVA was performed for a subset of shape variables (Area, Circularity, Aspect Ratio) and a subset of intensity variables for DAPI and GFP (Mean, Standard Deviation, Integrated Density, and Median) to see if there is a mean difference between homozygous and heterozygous worms. The mean difference between homozygous and heterozygous is significant for at least one of these variables ($DF = 1$, $F = 6.207$, $p = 1.32 * 10^{-9}$). Univariate ANOVAs were performed to identify the variables for which these groups differed. Significant differences were found for Area, Mean DAPI, Standard Deviation DAPI, Standard Deviation GFP, Integrated Density DAPI, Integrated Density GFP, and Median DAPI. Pairwise t-tests were carried out for these seven variables. A total of $19$ tests were performed, which gives a Type I error rate of $0.999998$. Using a Bonferroni-correction, $\alpha = 0.05/19 = 0.00263$, the two genotypes are only different for Mean DAPI ($p = 1.8*10^{-7}$), Standard Deviation DAPI ($p = 0.00013$), Integrated Density DAPI ($p = 0.00023$), and Median DAPI ($p = 4.2*10^{-8}$).
+
+The MANOVA test makes many assumptions. One assumption is that there are linear relationships among DVS, but this is likely not the case for my data. For example, there is likely no linear relationship between Circularity and Area. Another assumption is that there is no extreme outliers for multivariate or univariate data, but I did not do any stringent cleaning or analysis of the data, so it is likely that some outliers are present since the values were computed by an automated algorithm.
+
+```{r manova}
+# MANOVA
+man1 <- manova(cbind(shape.Area, shape.Circ., shape.AR, Mean.DAPI, Mean.GFP, StdDev.DAPI, StdDev.GFP, IntDen.DAPI, IntDen.GFP, Median.DAPI, Median.GFP) ~ rDNAdel, data = data)
+summary(man1)
+
+# univariate ANOVAs
+summary.aov(man1)
+
+# post-hoc t-tests
+pairwise.t.test(data$shape.Area,
+                data$rDNAdel, p.adj = 'none')
+pairwise.t.test(data$Mean.DAPI,
+                data$rDNAdel, p.adj = 'none')
+pairwise.t.test(data$StdDev.DAPI,
+                data$rDNAdel, p.adj = 'none')
+pairwise.t.test(data$StdDev.GFP,
+                data$rDNAdel, p.adj = 'none')
+pairwise.t.test(data$IntDen.DAPI,
+                data$rDNAdel, p.adj = 'none')
+pairwise.t.test(data$IntDen.GFP,
+                data$rDNAdel, p.adj = 'none')
+pairwise.t.test(data$Median.DAPI,
+                data$rDNAdel, p.adj = 'none')
+
+# calculate Type I error rate
+tI <- 1 - (1 - 0.5)^(1 + 11 + 7)
+tI
+
+# calculate adjusted alpha
+alpha_value <- 0.05 / (1 + 11 + 7)
+alpha_value
+```
+
+#### Randomization test
+
+A randomization test calculating the mean difference for Circularity, Standard Deviation DAPI, and Standard Deviation GFP between homozygotes and heterozygotes was performed. The null hypothesis is that there is no difference between the mean of these three variables for heterozygotes and homozygotes. The alternative hypotheses are that for each of these variables, there is a difference between the means. For Circularity, $91.74%$ of the random mean differences are greater than the true mean difference ($-0.0196$), so I cannot reject the null hypothesis for Circularity. For Standard Deviation DAPI, $0%$ of the random mean differences are greater than the true mean difference ($4.487$), so I reject the null hypothesis that there is no mean difference between heterozygotes and homozygotes for Standard Deviation DAPI. For Standard Deviation GFP, $0.2%$ of the random mean differences are greater than the true mean difference ($3.245$), so I reject the null hypothesis that there is no mean difference between heterozygotes and homozygotes for Standard Deviation GFP.
+
+```{r randomization, cache = T}
+# perform randomization tests
+## make data for randomization
+data_rand <- data %>%
+  select(rDNAdel, shape.Circ., StdDev.DAPI, StdDev.GFP)
+
+## compute actual mean differences
+data_rand_mean_diff <- data_rand %>%
+  group_by(rDNAdel) %>%
+  summarize_all(mean) %>%
+  select(-rDNAdel) %>%
+  summarize_all(diff)
+
+data_rand_mean_diff %>%
+  kbl(caption = 'Mean differences') %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+
+## initialize vectors
+diffs_shape.Circ. <- vector()
+diffs_StdDev.DAPI <- vector()
+diffs_StdDev.GFP <- vector()
+
+## calculate 5000 mean differences
+for (i in 1:5000){
+  rand <- data_rand %>%
+    mutate(rDNAdel = sample(data_rand$rDNAdel))
+ 
+  diffs_shape.Circ.[i] <- rand %>%
+    summarize(mean(shape.Circ.[rDNAdel == 'heterozygous']) - mean(shape.Circ.[rDNAdel == 'homozygous'])) %>%
+    pull()
+  
+  diffs_StdDev.DAPI[i] <- rand %>%
+    summarize(mean(StdDev.DAPI[rDNAdel == 'heterozygous']) - mean(StdDev.DAPI[rDNAdel == 'homozygous'])) %>%
+    pull()
+  
+  diffs_StdDev.GFP[i] <- rand %>%
+    summarize(mean(StdDev.GFP[rDNAdel == 'heterozygous']) - mean(StdDev.GFP[rDNAdel == 'homozygous'])) %>%
+    pull()
+}
+
+# compute values greater than test statistics
+mean(diffs_shape.Circ. > pull(select(data_rand_mean_diff, shape.Circ.)))
+mean(diffs_StdDev.DAPI > pull(select(data_rand_mean_diff, StdDev.DAPI)))
+mean(diffs_StdDev.GFP > pull(select(data_rand_mean_diff, StdDev.GFP)))
+
+diffs <- data.frame(diffs_shape.Circ., diffs_StdDev.DAPI, diffs_StdDev.GFP) %>%
+  pivot_longer(starts_with('diffs'), names_to = 'descriptor', values_to = 'mean_diffs') %>%
+  separate(descriptor, into = c('diffs_', 'descriptor'), sep = '_') %>%
+  select(-diffs_)
+
+# plot distributions
+diffs %>%
+  filter(descriptor == 'shape.Circ.') %>%
+  ggplot() +
+  geom_histogram(aes(x = mean_diffs)) +
+  geom_vline(xintercept = pull(select(data_rand_mean_diff, shape.Circ.))) +
+  labs(title = 'Circularity randomized mean differences',
+       x = 'Mean difference', y = 'Count') +
+  theme_bw()
+
+diffs %>%
+  filter(descriptor == 'StdDev.DAPI') %>%
+  ggplot() +
+  geom_histogram(aes(x = mean_diffs)) +
+  geom_vline(xintercept = pull(select(data_rand_mean_diff, StdDev.DAPI))) +
+  labs(title = 'DAPI standard deviation randomized mean differences',
+       x = 'Mean difference', y = 'Count') +
+  theme_bw()
+
+diffs %>%
+  filter(descriptor == 'StdDev.GFP') %>%
+  ggplot() +
+  geom_histogram(aes(x = mean_diffs)) +
+  geom_vline(xintercept = pull(select(data_rand_mean_diff, StdDev.GFP))) +
+  labs(title = 'GFP standard deviation randomized mean differences',
+       x = 'Mean difference', y = 'Count') +
+  theme_bw()
+```
+
+### Linear regression
+
+#### Linear regression model
+
+I built a linear regression model to predict Median GFP from mean-centered Median DAPI and Median mCherry, including the interaction. The predicted Median GFP for an average Median DAPI and average Median mCherry is $0.304$. Controlling for Median mCherry, average Median GFP increases by $0.0225$ for every unit increase in average Median DAPI. Controlling for Median DAPI, average Median GFP increases by $0.0444$ for every unit increase in average Median mCherry. The slope for average Median DAPI on Median GFP is $5.978*10^{-4}$ for each unit increase in average Median mCherry. The proportion of the variation in Median GFP explained by the model is equal to $0.0205$. The linearity assumption may not be met as Residuals vs. Fitted values does not appear linear, although this may not be the case. The assumption of normality fails as the QQplot shows that residuals do not fall along the normal line. The assumption of homoskedasticity is met as the Breush-Pagan test does not reject the null hypothesis of homoskedasticity ($p=0.848$). Robust standard errors were computed for the model, but neither coefficient estimates nor significance were affected: Median mCherry and the interaction of Median DAPI and Median mCherry were still significant.
+    
+```{r linear regression}
+# create data frame for linear regression
+data_lm <- data %>%
+  ## select columns
+  select(Median.GFP, Median.DAPI, Median.mCherry) %>%
+  ## mean-center
+  mutate(Median.DAPI = as.numeric(scale(Median.DAPI, scale = F)),
+         Median.mCherry = as.numeric(scale(Median.mCherry, scale = F)))
+
+# build linear regression model
+fit_lm1 <- lm(Median.GFP ~ Median.DAPI * Median.mCherry, data = data_lm)
+summary(fit_lm1)
+
+# plot regression
+## set line colors
+mycols<-c("#619CFF","#F8766D","#00BA38")
+names(mycols)<-c("- 1 sd", "mean", "+ 1 sd")
+mycols=as.factor(mycols)
+
+## setup data for plotting
+data_lm_plot <- data_lm
+
+### set Median.DAPI to its mean
+data_lm_plot <- data_lm_plot %>%
+  mutate(Median.DAPI = mean(data_lm$Median.DAPI))
+
+### add mean column
+data_lm_plot <- data_lm_plot %>%
+  mutate(mean = predict(fit_lm1, data_lm_plot))
+
+### set Median.DAPI to its mean + 1 sd
+data_lm_plot <- data_lm_plot %>%
+  mutate(Median.DAPI = mean(data_lm$Median.DAPI) + sd(data_lm$Median.DAPI))
+
+### add mean + 1 sd column
+data_lm_plot <- data_lm_plot %>%
+  mutate(plus.sd = predict(fit_lm1, data_lm_plot))
+
+### set Median.DAPI to its mean - 1 sd
+data_lm_plot <- data_lm_plot %>%
+  mutate(Median.DAPI = mean(data_lm$Median.DAPI) - sd(data_lm$Median.DAPI))
+
+### add mean + 1 sd column
+data_lm_plot <- data_lm_plot %>%
+  mutate(minus.sd = predict(fit_lm1, data_lm_plot))
+
+## plot
+data_lm %>%
+  ggplot(aes(x = Median.mCherry, y = Median.GFP)) + 
+  geom_point() +
+  geom_line(data = data_lm_plot, aes(y = mean, color = 'mean')) +
+  geom_line(data = data_lm_plot, aes(y = plus.sd, color = '+ 1 sd')) +
+  geom_line(data = data_lm_plot, aes(y = minus.sd, color = '- 1 sd')) +
+  scale_color_manual(values = mycols) +
+  labs(color = 'Median.DAPI',
+       title = 'Regression interaction') +
+  theme_bw()
+
+# check assumptions
+## linearity
+ggplot() +
+  geom_point(aes(fit_lm1$fitted.values, fit_lm1$residuals)) +
+  geom_hline(yintercept = 0) +
+  labs(title = 'Check linearity',
+       x = 'Fitted values', y = 'Residuals') +
+  theme_bw()
+
+## normality
+### distribution of residuals
+ggplot() +
+  geom_histogram(aes(fit_lm1$residuals)) +
+  labs(title = 'Distribution of residuals',
+       x = 'Residuals', y = 'Count') +
+  theme_bw()
+
+### qqplot of residuals
+ggplot() +
+  geom_qq(aes(sample = fit_lm1$residuals)) +
+  geom_qq_line(aes(sample = fit_lm1$residuals)) +
+  labs(title = 'QQplot of residuals', subtitle = 'Normal distribution') +
+  theme_bw()
+
+## homoskedasticity
+bptest(fit_lm1)
+
+# robust SEs
+coeftest(fit_lm1, vcov = vcovHC(fit_lm1))
+```
+
+#### Bootstrapped linear regression model
+
+The same regression model with interaction was rerun and bootstrapped standard errors were computed. Original SEs are as follows: Median DAPI equals $0.01581$, Median mCherry equals $0.01395$, and the interaction equals $3.011*10^{-4}$. Robust SEs are as follows: Median DAPI equals $0.01483$, Median mCherry equals $0.01324$, and the interaction equals $2.614*10^{-4}$. Bootstrapped SEs are as follows: Median DAPI equals $0.01476$, Median mCherry equals $0.01295$, and the interaction equals $2.562*10^{-4}$. SEs are lower for the robust SEs than the original and lower still for the bootstrapped SEs than the robust SEs. The p-values for the robust SEs were lower than for the original SEs.
+
+```{r linear regression bootstrapped SEs}
+# bootstrap
+samp_distn <- replicate(5000, {
+  boot_dat <- sample_frac(data_lm, replace = T)
+  
+  fit <- lm(Median.GFP ~ Median.DAPI * Median.mCherry, data = boot_dat)
+  coef(fit)
+})
+
+# calculate bootstrapped SEs
+samp_distn %>%
+  t %>%
+  as.data.frame %>%
+  summarize_all(sd) %>%
+  kbl(caption = 'Bootstrapped SEs') %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```
+
+### Logistic regression
+
+#### Some variables
+
+I built a logistic regression model to predict whether or not a nucleus belongs to an *rDNA$\Delta$* homozygous worm from Mean mCherry, Minimum mCherry, Integrated Density DAPI, Integrated Density GFP, Median DAPI, and Median GFP. For each unit increase in Mean mCherry, the probability of predicting a homozygote is multiplied by $0.290$. For each unit increase in Minimum mCherry, the probability of predicting a homozygote is multiplied by $24.450$. For each unit increase in Integrated Density DAPI, the probability of predicting a homozygote is multiplied by $1.000$. For each unit increase in Integrated Density GFP, the probability of predicting a homozygote is multiplied by $1.003$. For each unit increase in Median DAPI, the probability of predicting a homozygote is multiplied by $1.000$. For each unit increase in Median GFP, the probability of predicting a homozygote is multiplied by $1.034$. The model's performance is great for within-sample predictions for both true positives and true negatives: accuracy equals $0.962$, sensitivity equals $0.969$, specificity equals $0.959$, precision equals $0.918$, and AUC equals $0.990$. The AUC is very high.
+    
+```{r logistic regression}
+# make binary response variable
+data_glm <- data %>%
+  mutate(y = ifelse(rDNAdel == 'homozygous', 1, 0))
+
+# run logistic regression
+fit_some <- glm(y ~ Mean.mCherry + Min.mCherry + IntDen.DAPI + IntDen.GFP + Median.DAPI + Median.GFP, data = data_glm, family = 'binomial')
+coeftest(fit_some)
+exp(coef(fit_some)) %>%
+  kbl(caption = 'Exponentiated coefficient estimates') %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F)
+
+# confusion matrix
+table(predict = as.numeric(predict(fit_some, type = 'response') > 0.5), truth = data_glm$y) %>%
+  addmargins()
+
+# class diagnostics
+probs_some <- predict(fit_some, type = 'response')
+class_diag(probs_some, data_glm$y) %>%
+  kbl(caption = 'In-sample class diagnostics') %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+
+# density plot logit
+logit_some <- predict(fit_some, type = 'link')
+data_glm %>%
+  mutate(logit = logit_some) %>%
+  ggplot(aes(x = logit, fill = rDNAdel)) +
+  geom_density() +
+  theme_bw() +
+  labs(title = 'Density of log-odds by genotype')
+
+# ROC curve and AUC
+ROCplot_some <- data_glm %>%
+  mutate(probs = probs_some) %>%
+  ggplot() +
+  geom_roc(aes(d = y, m = probs), n.cuts = 0)
+ROCplot_some
+calc_auc(ROCplot_some) %>%
+  kbl(caption = 'In-sample AUC') %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = F)
+```
+
+#### All explanatory variables, 10-fold CV, and LASSO
+
+I built a logistic regression model to predict whether or not a nucleus belongs to an *rDNA$\Delta$* homozygous worm from all variables with no interaction. In-sample classification diagnostics were still very high for this model, but not quite as high for the more limited model above: accuracy equals $0.960$, sensitivity equals $0.931$, specificity equals $0.974$, precision equals $0.943$, and AUC equals $0.953$. 10-fold cross validation of this model revealed some overfitting: accuracy equals $0.927$, sensitivity equals $0.879$, specificity equals $0.954$, precision equals $0.892$, and AUC equals $0.930$. The decreased sensitivity and precision indicate that the model is overfitted when it comes to predicting true positives. The AUC is still great, although it is noticeably lower than the in-sample AUC.
+
+LASSO was performed on this model to give the simplest model using `lambda.1se`. LASSO retained the following variables: position low, position medium, Minor axis length, Angle, Roundness, Solidity, Mean GFP, Mean mCherry, Standard Deviation DAPI, Standard Deviation mCherry, Minimum DAPI, Minimum GFP, Maximum DAPI, Maximum GFP, Maximum mCherry, and Median DAPI. 10-fold cross validation was performed for this simplified model using the variables selected by LASSO, which gave an AUC of $0.991$. This is a great AUC and is noticeably higher than the 10-fold CV AUC for the full model ($0.930$). The LASSO model appears have gotten past the issue of overfitting.
+
+```{r logistic regression all}
+# make binary response variable
+data_glm <- data %>%
+  mutate(y = ifelse(rDNAdel == 'homozygous', 1, 0)) %>%
+  select(-rDNAdel)
+
+# run logistic regression
+fit_all <- glm(y ~ ., data = data_glm, family = 'binomial')
+coeftest(fit_all)
+
+# in-sample classification diagnostics
+probs_all <- predict(fit_all, type = 'response')
+class_diag(probs_all, data_glm$y) %>%
+  kbl(caption = 'In-sample class diagnostics') %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+
+# 10-fold CV
+k=10
+
+data_glm_random <- data_glm %>%
+  sample_frac()
+folds <- ntile(1:nrow(data_glm_random), n = 10)
+
+diags <- NULL
+for(i in 1:k){
+  train <- data_glm_random[folds != i, ]
+  test <- data_glm_random[folds == i, ]
+  truth <- test$y
+  
+  fit <- glm(y ~ ., data = train, family = 'binomial')
+  probs <- predict(fit, newdata = test, type = 'response')
+  
+  diags <- rbind(diags, class_diag(probs, truth))
+}
+
+summarize_all(diags, mean) %>%
+  kbl(caption = '10-fold CV class diagnostics') %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+
+# LASSO
+## put predictors and response in matrices
+y <- as.logical(as.matrix(data_glm$y))
+x <- model.matrix(fit_all)[, -1]
+
+## perform LASSO
+cv <- cv.glmnet(x, y, family = 'binomial')
+lasso <- glmnet(x, y, family="binomial", lambda = cv$lambda.1se)
+coef(lasso)
+
+# 10-fold CV LASSO
+data_glm_lasso <- data_glm %>%
+  mutate(low = ifelse(position == 'low', 1, 0),
+         medium = ifelse(position == 'medium', 1, 0),
+         high = ifelse(position == 'high', 1, 0))
+
+k=10
+
+data_glm_random <- data_glm_lasso %>%
+  sample_frac()
+folds <- ntile(1:nrow(data_glm_random), n = 10)
+
+diags <- NULL
+for(i in 1:k){
+  train <- data_glm_random[folds != i, ]
+  test <- data_glm_random[folds == i, ]
+  truth <- test$y
+  
+  fit <- glm(y ~ low + medium + shape.Minor + shape.Angle + shape.Round + shape.Solidity + Mean.GFP + Mean.mCherry + StdDev.DAPI + StdDev.mCherry + Min.DAPI + Min.GFP + Max.DAPI + Max.GFP + Max.mCherry + Median.DAPI,
+             data = train, family = 'binomial')
+  probs <- predict(fit, newdata = test, type = 'response')
+  
+  diags <- rbind(diags, class_diag(probs, truth))
+}
+
+summarize_all(diags, mean)%>%
+  kbl(caption = '10-fold CV LASSO class diagnostics') %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"))
+```

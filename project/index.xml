@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Projects on Chris Turner</title>
+    <link>/project/</link>
+    <description>Recent content in Projects on Chris Turner</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>en-US</language><atom:link href="/project/index.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>Project 1: Exploratory Data Analysis</title>
+      <link>/project/project1/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>/project/project1/</guid>
+      <description>Data Wrangling and Data Exploration 0. Introduction Ribosomes, the protein factories of the cell, are composed largely of RNA which is transcribed from ribosomal DNA (rDNA) repeat arrays. The nucleolus, the largest nuclear body, forms around these rDNA repeats. Aside from being the site of the initial steps of ribosome biogenesis, the nucleolus is hypothesized to function in organizing the genome in 3D space. One of these organizing structures of DNA is the genomic loci that contact the nucleolus, called nucleolus associated domains (NADs).</description>
+    </item>
+    
+    <item>
+      <title>Project 2: Modeling, Testing, and Predicting</title>
+      <link>/project/project2/</link>
+      <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
+      
+      <guid>/project/project2/</guid>
+      <description>Modeling library(tidyverse) library(lmtest) library(kableExtra) library(plotROC) library(glmnet) library(sandwich) Data import and descriptions The dataset I am working with is an imaging dataset that I generated myself. I imaged nuclei in the model organism C. elegans of two genotypes: rDNA deletion heterozygotes (rDNA\(\Delta\)/+) and homozygotes (rDNA\(\Delta\)/\(\Delta\)). The purpose of the experiment is to determine the effect of deletion of rDNA upon organization of chromatin and the nucleolus to test my overall hypothesis that the rDNA locus contributes to the overall architecture of the genome and the nucleolus.</description>
+    </item>
+    
+  </channel>
+</rss>

@@ -1,0 +1,1659 @@
+<!DOCTYPE html>
+<html lang="en-US">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="author" content="Trevor Freeman" />
+    
+    <link rel="shortcut icon" type="image/x-icon" href="../../img/favicon.ico">
+    <title>Project 2: Modeling, Testing, and Predicting</title>
+    <meta name="generator" content="Hugo 0.83.1" />
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
+    <link rel="stylesheet" type="text/css" href="../../css/main.css" />
+    <link rel="stylesheet" type="text/css" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css" />
+    <link rel="stylesheet" type="text/css" href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,400,200bold,400old" />
+    
+    <!--[if lt IE 9]>
+			<script src="https://oss.maxcdn.com/libs/html5shiv/3.7.0/html5shiv.js"></script>
+			<script src="https://oss.maxcdn.com/libs/respond.js/1.4.2/respond.min.js"></script>
+		<![endif]-->
+
+    
+  </head>
+
+  <body>
+    <div id="wrap">
+      
+      <nav class="navbar navbar-default">
+  <div class="container">
+    <div class="navbar-header">
+      <a class="navbar-brand" href="../../"><i class="fa fa-home"></i></a>
+      <button type="button" class="navbar-toggle" data-toggle="collapse" data-target="#navbar">
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+      </button>
+    </div>
+    <div class="navbar-collapse collapse" id="navbar">
+      <ul class="nav navbar-nav navbar-right">
+      
+        
+        <li><a href="../../post/">BLOG</a></li>
+        
+        <li><a href="../../projects/">PROJECTS</a></li>
+        
+        <li><a href="../../resume/">RESUME</a></li>
+        
+      
+      </ul>
+    </div>
+  </div>
+</nav>
+
+      <div class="container">
+        <div class="blog-post">
+          <h3>
+            <strong><a href="../../project/project2/">Project 2: Modeling, Testing, and Predicting</a></strong>
+          </h3>
+        </div>
+ 
+<div class="blog-title">
+          <h4>
+         January 1, 0001 
+            &nbsp;&nbsp;
+            
+          </h4>
+        </div>
+
+        <div class="panel panel-default">
+          <div class="panel-body">
+            <div class="blogpost">
+              
+<script src="../../rmarkdown-libs/kePrint/kePrint.js"></script>
+<link href="../../rmarkdown-libs/lightable/lightable.css" rel="stylesheet" />
+
+
+<div id="modeling" class="section level1">
+<h1>Modeling</h1>
+<pre class="r"><code>library(tidyverse)
+library(lmtest)
+library(kableExtra)
+library(plotROC)
+library(glmnet)
+library(sandwich)</code></pre>
+<div id="data-import-and-descriptions" class="section level2">
+<h2>Data import and descriptions</h2>
+<p>The dataset I am working with is an imaging dataset that I generated myself. I imaged nuclei in the model organism <em>C. elegans</em> of two genotypes: <em>rDNA</em> deletion heterozygotes (<em>rDNA<span class="math inline">\(\Delta\)</span>/+</em>) and homozygotes (<em>rDNA<span class="math inline">\(\Delta\)</span>/<span class="math inline">\(\Delta\)</span></em>). The purpose of the experiment is to determine the effect of deletion of <em>rDNA</em> upon organization of chromatin and the nucleolus to test my overall hypothesis that the <em>rDNA</em> locus contributes to the overall architecture of the genome and the nucleolus. Images were acquired by fluorescent confocal microscopy of z-stacks in three channels for three different markers: DAPI stains DNA, DAO-5::GFP localizes to the nucleolus, and mCherry::H2B is present in <em>rDNA<span class="math inline">\(\Delta\)</span>/+</em> but not <em>rDNA<span class="math inline">\(\Delta\)</span>/<span class="math inline">\(\Delta\)</span></em>.</p>
+<p>The data was acquired by an algorithm that identified nuclei from the background based on DAPI staining. Once the nuclei were identified, shape and intensity values for each nucleus and each channel were computed. The dataset contains <span class="math inline">\(506\)</span> observations of <span class="math inline">\(28\)</span> variables. Each observation contains data for a single focal plane of a single nucleus. The first two variables contain information about the worm’s genotpype (<em>rDNA<span class="math inline">\(\Delta\)</span></em> homozygous or heterozygous) and the focal plane’s relative position within the stack (low, medium, or high). The next eight variables contain information about the shape of the nucleus and contain the prefix <code>shape.</code>. These include: Area, Major and Minor axis length, Angle, Circularity, Aspect Ratio, Roundness, and Solidity. The final six variables describe six intensity measurements for each of the three channels (DAPI, GFP, mCherry) including: Mean, Standard Deviation, Minimum, Maximum, Integrated Density, and Median.</p>
+<pre class="r"><code>data &lt;- read_csv(&#39;~/personal/projects/project2/imaging_data.csv&#39;)
+
+data &lt;-
+  data %&gt;%
+  select(-X1, -worm, -Slice, -starts_with(&#39;RawIntDen&#39;))
+
+data %&gt;%
+  head(n = 5) %&gt;%
+  kbl(caption = &#39;Data&#39;) %&gt;%
+  kable_styling(bootstrap_options = c(&quot;striped&quot;, &quot;hover&quot;, &quot;condensed&quot;)) %&gt;%
+  scroll_box(width = &#39;100%&#39;, height = &#39;100%&#39;)</code></pre>
+<div style="border: 1px solid #ddd; padding: 0px; overflow-y: scroll; height:100%; overflow-x: scroll; width:100%; ">
+<table class="table table-striped table-hover table-condensed" style="margin-left: auto; margin-right: auto;">
+<caption>
+(#tab:data import)Data
+</caption>
+<thead>
+<tr>
+<th style="text-align:left;position: sticky; top:0; background-color: #FFFFFF;">
+rDNAdel
+</th>
+<th style="text-align:left;position: sticky; top:0; background-color: #FFFFFF;">
+position
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+shape.Area
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+shape.Major
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+shape.Minor
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+shape.Angle
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+shape.Circ.
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+shape.AR
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+shape.Round
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+shape.Solidity
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+Mean.DAPI
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+Mean.GFP
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+Mean.mCherry
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+StdDev.DAPI
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+StdDev.GFP
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+StdDev.mCherry
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+Min.DAPI
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+Min.GFP
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+Min.mCherry
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+Max.DAPI
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+Max.GFP
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+Max.mCherry
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+IntDen.DAPI
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+IntDen.GFP
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+IntDen.mCherry
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+Median.DAPI
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+Median.GFP
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+Median.mCherry
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left;">
+heterozygous
+</td>
+<td style="text-align:left;">
+low
+</td>
+<td style="text-align:right;">
+3.718
+</td>
+<td style="text-align:right;">
+2.409
+</td>
+<td style="text-align:right;">
+1.965
+</td>
+<td style="text-align:right;">
+172.125
+</td>
+<td style="text-align:right;">
+0.117
+</td>
+<td style="text-align:right;">
+1.226
+</td>
+<td style="text-align:right;">
+0.816
+</td>
+<td style="text-align:right;">
+0.615
+</td>
+<td style="text-align:right;">
+98.984
+</td>
+<td style="text-align:right;">
+8.806
+</td>
+<td style="text-align:right;">
+9.579
+</td>
+<td style="text-align:right;">
+16.867
+</td>
+<td style="text-align:right;">
+8.350
+</td>
+<td style="text-align:right;">
+19.521
+</td>
+<td style="text-align:right;">
+61
+</td>
+<td style="text-align:right;">
+3
+</td>
+<td style="text-align:right;">
+3
+</td>
+<td style="text-align:right;">
+168
+</td>
+<td style="text-align:right;">
+58
+</td>
+<td style="text-align:right;">
+133
+</td>
+<td style="text-align:right;">
+368.007
+</td>
+<td style="text-align:right;">
+32.740
+</td>
+<td style="text-align:right;">
+35.614
+</td>
+<td style="text-align:right;">
+96
+</td>
+<td style="text-align:right;">
+6
+</td>
+<td style="text-align:right;">
+3
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+heterozygous
+</td>
+<td style="text-align:left;">
+low
+</td>
+<td style="text-align:right;">
+7.472
+</td>
+<td style="text-align:right;">
+3.473
+</td>
+<td style="text-align:right;">
+2.739
+</td>
+<td style="text-align:right;">
+30.921
+</td>
+<td style="text-align:right;">
+0.328
+</td>
+<td style="text-align:right;">
+1.268
+</td>
+<td style="text-align:right;">
+0.789
+</td>
+<td style="text-align:right;">
+0.824
+</td>
+<td style="text-align:right;">
+121.828
+</td>
+<td style="text-align:right;">
+15.559
+</td>
+<td style="text-align:right;">
+15.735
+</td>
+<td style="text-align:right;">
+31.377
+</td>
+<td style="text-align:right;">
+13.749
+</td>
+<td style="text-align:right;">
+27.423
+</td>
+<td style="text-align:right;">
+69
+</td>
+<td style="text-align:right;">
+3
+</td>
+<td style="text-align:right;">
+3
+</td>
+<td style="text-align:right;">
+229
+</td>
+<td style="text-align:right;">
+90
+</td>
+<td style="text-align:right;">
+176
+</td>
+<td style="text-align:right;">
+910.301
+</td>
+<td style="text-align:right;">
+116.257
+</td>
+<td style="text-align:right;">
+117.574
+</td>
+<td style="text-align:right;">
+116
+</td>
+<td style="text-align:right;">
+11
+</td>
+<td style="text-align:right;">
+3
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+heterozygous
+</td>
+<td style="text-align:left;">
+low
+</td>
+<td style="text-align:right;">
+9.742
+</td>
+<td style="text-align:right;">
+3.735
+</td>
+<td style="text-align:right;">
+3.321
+</td>
+<td style="text-align:right;">
+16.457
+</td>
+<td style="text-align:right;">
+0.568
+</td>
+<td style="text-align:right;">
+1.125
+</td>
+<td style="text-align:right;">
+0.889
+</td>
+<td style="text-align:right;">
+0.915
+</td>
+<td style="text-align:right;">
+149.025
+</td>
+<td style="text-align:right;">
+12.556
+</td>
+<td style="text-align:right;">
+20.645
+</td>
+<td style="text-align:right;">
+36.389
+</td>
+<td style="text-align:right;">
+13.116
+</td>
+<td style="text-align:right;">
+33.402
+</td>
+<td style="text-align:right;">
+67
+</td>
+<td style="text-align:right;">
+3
+</td>
+<td style="text-align:right;">
+3
+</td>
+<td style="text-align:right;">
+250
+</td>
+<td style="text-align:right;">
+129
+</td>
+<td style="text-align:right;">
+255
+</td>
+<td style="text-align:right;">
+1451.802
+</td>
+<td style="text-align:right;">
+122.325
+</td>
+<td style="text-align:right;">
+201.119
+</td>
+<td style="text-align:right;">
+150
+</td>
+<td style="text-align:right;">
+8
+</td>
+<td style="text-align:right;">
+3
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+heterozygous
+</td>
+<td style="text-align:left;">
+low
+</td>
+<td style="text-align:right;">
+11.401
+</td>
+<td style="text-align:right;">
+4.424
+</td>
+<td style="text-align:right;">
+3.281
+</td>
+<td style="text-align:right;">
+10.964
+</td>
+<td style="text-align:right;">
+0.428
+</td>
+<td style="text-align:right;">
+1.348
+</td>
+<td style="text-align:right;">
+0.742
+</td>
+<td style="text-align:right;">
+0.871
+</td>
+<td style="text-align:right;">
+159.772
+</td>
+<td style="text-align:right;">
+23.522
+</td>
+<td style="text-align:right;">
+118.094
+</td>
+<td style="text-align:right;">
+43.501
+</td>
+<td style="text-align:right;">
+23.952
+</td>
+<td style="text-align:right;">
+72.968
+</td>
+<td style="text-align:right;">
+72
+</td>
+<td style="text-align:right;">
+3
+</td>
+<td style="text-align:right;">
+2
+</td>
+<td style="text-align:right;">
+255
+</td>
+<td style="text-align:right;">
+186
+</td>
+<td style="text-align:right;">
+255
+</td>
+<td style="text-align:right;">
+1821.541
+</td>
+<td style="text-align:right;">
+268.171
+</td>
+<td style="text-align:right;">
+1346.371
+</td>
+<td style="text-align:right;">
+159
+</td>
+<td style="text-align:right;">
+15
+</td>
+<td style="text-align:right;">
+114
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+heterozygous
+</td>
+<td style="text-align:left;">
+low
+</td>
+<td style="text-align:right;">
+6.352
+</td>
+<td style="text-align:right;">
+3.356
+</td>
+<td style="text-align:right;">
+2.410
+</td>
+<td style="text-align:right;">
+20.659
+</td>
+<td style="text-align:right;">
+0.461
+</td>
+<td style="text-align:right;">
+1.393
+</td>
+<td style="text-align:right;">
+0.718
+</td>
+<td style="text-align:right;">
+0.869
+</td>
+<td style="text-align:right;">
+139.333
+</td>
+<td style="text-align:right;">
+22.159
+</td>
+<td style="text-align:right;">
+17.346
+</td>
+<td style="text-align:right;">
+35.291
+</td>
+<td style="text-align:right;">
+19.087
+</td>
+<td style="text-align:right;">
+29.640
+</td>
+<td style="text-align:right;">
+77
+</td>
+<td style="text-align:right;">
+3
+</td>
+<td style="text-align:right;">
+3
+</td>
+<td style="text-align:right;">
+237
+</td>
+<td style="text-align:right;">
+140
+</td>
+<td style="text-align:right;">
+181
+</td>
+<td style="text-align:right;">
+884.989
+</td>
+<td style="text-align:right;">
+140.746
+</td>
+<td style="text-align:right;">
+110.174
+</td>
+<td style="text-align:right;">
+134
+</td>
+<td style="text-align:right;">
+18
+</td>
+<td style="text-align:right;">
+3
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div id="hypothesis-testing" class="section level3">
+<h3>Hypothesis testing</h3>
+<div id="manova-anovas-and-t-tests" class="section level4">
+<h4>MANOVA, ANOVAs, and t tests</h4>
+<p>A MANOVA was performed for a subset of shape variables (Area, Circularity, Aspect Ratio) and a subset of intensity variables for DAPI and GFP (Mean, Standard Deviation, Integrated Density, and Median) to see if there is a mean difference between homozygous and heterozygous worms. The mean difference between homozygous and heterozygous is significant for at least one of these variables (<span class="math inline">\(DF = 1\)</span>, <span class="math inline">\(F = 6.207\)</span>, <span class="math inline">\(p = 1.32 * 10^{-9}\)</span>). Univariate ANOVAs were performed to identify the variables for which these groups differed. Significant differences were found for Area, Mean DAPI, Standard Deviation DAPI, Standard Deviation GFP, Integrated Density DAPI, Integrated Density GFP, and Median DAPI. Pairwise t-tests were carried out for these seven variables. A total of <span class="math inline">\(19\)</span> tests were performed, which gives a Type I error rate of <span class="math inline">\(0.999998\)</span>. Using a Bonferroni-correction, <span class="math inline">\(\alpha = 0.05/19 = 0.00263\)</span>, the two genotypes are only different for Mean DAPI (<span class="math inline">\(p = 1.8*10^{-7}\)</span>), Standard Deviation DAPI (<span class="math inline">\(p = 0.00013\)</span>), Integrated Density DAPI (<span class="math inline">\(p = 0.00023\)</span>), and Median DAPI (<span class="math inline">\(p = 4.2*10^{-8}\)</span>).</p>
+<p>The MANOVA test makes many assumptions. One assumption is that there are linear relationships among DVS, but this is likely not the case for my data. For example, there is likely no linear relationship between Circularity and Area. Another assumption is that there is no extreme outliers for multivariate or univariate data, but I did not do any stringent cleaning or analysis of the data, so it is likely that some outliers are present since the values were computed by an automated algorithm.</p>
+<pre class="r"><code># MANOVA
+man1 &lt;- manova(cbind(shape.Area, shape.Circ., shape.AR, Mean.DAPI, Mean.GFP, StdDev.DAPI, StdDev.GFP, IntDen.DAPI, IntDen.GFP, Median.DAPI, Median.GFP) ~ rDNAdel, data = data)
+summary(man1)</code></pre>
+<pre><code>## Df Pillai approx F num Df den Df Pr(&gt;F)
+## rDNAdel 1 0.12144 6.2074 11 494 1.32e-09 ***
+## Residuals 504
+## ---
+## Signif. codes: 0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1
+&#39; &#39; 1</code></pre>
+<pre class="r"><code># univariate ANOVAs
+summary.aov(man1)</code></pre>
+<pre><code>## Response shape.Area :
+## Df Sum Sq Mean Sq F value Pr(&gt;F)
+## rDNAdel 1 148 148.025 5.6972 0.01736 *
+## Residuals 504 13095 25.982
+## ---
+## Signif. codes: 0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1
+&#39; &#39; 1
+##
+## Response shape.Circ. :
+## Df Sum Sq Mean Sq F value Pr(&gt;F)
+## rDNAdel 1 0.0422 0.042226 2.0044 0.1575
+## Residuals 504 10.6177 0.021067
+##
+## Response shape.AR :
+## Df Sum Sq Mean Sq F value Pr(&gt;F)
+## rDNAdel 1 0.909 0.90942 1.6806 0.1954
+## Residuals 504 272.723 0.54112
+##
+## Response Mean.DAPI :
+## Df Sum Sq Mean Sq F value Pr(&gt;F)
+## rDNAdel 1 54165 54165 28.042 1.776e-07 ***
+## Residuals 504 973497 1932
+## ---
+## Signif. codes: 0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1
+&#39; &#39; 1
+##
+## Response Mean.GFP :
+## Df Sum Sq Mean Sq F value Pr(&gt;F)
+## rDNAdel 1 466 466.17 1.3951 0.2381
+## Residuals 504 168412 334.15
+##
+## Response StdDev.DAPI :
+## Df Sum Sq Mean Sq F value Pr(&gt;F)
+## rDNAdel 1 2210 2209.90 14.905 0.0001277 ***
+## Residuals 504 74723 148.26
+## ---
+## Signif. codes: 0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1
+&#39; &#39; 1
+##
+## Response StdDev.GFP :
+## Df Sum Sq Mean Sq F value Pr(&gt;F)
+## rDNAdel 1 1156 1156.16 7.9093 0.00511 **
+## Residuals 504 73674 146.18
+## ---
+## Signif. codes: 0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1
+&#39; &#39; 1
+##
+## Response IntDen.DAPI :
+## Df Sum Sq Mean Sq F value Pr(&gt;F)
+## rDNAdel 1 13493425 13493425 13.775 0.000229 ***
+## Residuals 504 493707407 979578
+## ---
+## Signif. codes: 0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1
+&#39; &#39; 1
+##
+## Response IntDen.GFP :
+## Df Sum Sq Mean Sq F value Pr(&gt;F)
+## rDNAdel 1 319981 319981 5.3442 0.02119 *
+## Residuals 504 30176447 59874
+## ---
+## Signif. codes: 0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1
+&#39; &#39; 1
+##
+## Response Median.DAPI :
+## Df Sum Sq Mean Sq F value Pr(&gt;F)
+## rDNAdel 1 71281 71281 30.986 4.23e-08 ***
+## Residuals 504 1159428 2300
+## ---
+## Signif. codes: 0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1
+&#39; &#39; 1
+##
+## Response Median.GFP :
+## Df Sum Sq Mean Sq F value Pr(&gt;F)
+## rDNAdel 1 69 69.24 0.2539 0.6145
+## Residuals 504 137431 272.68</code></pre>
+<pre class="r"><code># post-hoc t-tests
+pairwise.t.test(data$shape.Area,
+                data$rDNAdel, p.adj = &#39;none&#39;)</code></pre>
+<pre><code>## 
+##  Pairwise comparisons using t tests with pooled SD 
+## 
+## data:  data$shape.Area and data$rDNAdel 
+## 
+##            heterozygous
+## homozygous 0.017       
+## 
+## P value adjustment method: none</code></pre>
+<pre class="r"><code>pairwise.t.test(data$Mean.DAPI,
+                data$rDNAdel, p.adj = &#39;none&#39;)</code></pre>
+<pre><code>## 
+##  Pairwise comparisons using t tests with pooled SD 
+## 
+## data:  data$Mean.DAPI and data$rDNAdel 
+## 
+##            heterozygous
+## homozygous 1.8e-07     
+## 
+## P value adjustment method: none</code></pre>
+<pre class="r"><code>pairwise.t.test(data$StdDev.DAPI,
+                data$rDNAdel, p.adj = &#39;none&#39;)</code></pre>
+<pre><code>## 
+##  Pairwise comparisons using t tests with pooled SD 
+## 
+## data:  data$StdDev.DAPI and data$rDNAdel 
+## 
+##            heterozygous
+## homozygous 0.00013     
+## 
+## P value adjustment method: none</code></pre>
+<pre class="r"><code>pairwise.t.test(data$StdDev.GFP,
+                data$rDNAdel, p.adj = &#39;none&#39;)</code></pre>
+<pre><code>## 
+##  Pairwise comparisons using t tests with pooled SD 
+## 
+## data:  data$StdDev.GFP and data$rDNAdel 
+## 
+##            heterozygous
+## homozygous 0.0051      
+## 
+## P value adjustment method: none</code></pre>
+<pre class="r"><code>pairwise.t.test(data$IntDen.DAPI,
+                data$rDNAdel, p.adj = &#39;none&#39;)</code></pre>
+<pre><code>## 
+##  Pairwise comparisons using t tests with pooled SD 
+## 
+## data:  data$IntDen.DAPI and data$rDNAdel 
+## 
+##            heterozygous
+## homozygous 0.00023     
+## 
+## P value adjustment method: none</code></pre>
+<pre class="r"><code>pairwise.t.test(data$IntDen.GFP,
+                data$rDNAdel, p.adj = &#39;none&#39;)</code></pre>
+<pre><code>## 
+##  Pairwise comparisons using t tests with pooled SD 
+## 
+## data:  data$IntDen.GFP and data$rDNAdel 
+## 
+##            heterozygous
+## homozygous 0.021       
+## 
+## P value adjustment method: none</code></pre>
+<pre class="r"><code>pairwise.t.test(data$Median.DAPI,
+                data$rDNAdel, p.adj = &#39;none&#39;)</code></pre>
+<pre><code>## 
+##  Pairwise comparisons using t tests with pooled SD 
+## 
+## data:  data$Median.DAPI and data$rDNAdel 
+## 
+##            heterozygous
+## homozygous 4.2e-08     
+## 
+## P value adjustment method: none</code></pre>
+<pre class="r"><code># calculate Type I error rate
+tI &lt;- 1 - (1 - 0.5)^(1 + 11 + 7)
+tI</code></pre>
+<pre><code>## [1] 0.9999981</code></pre>
+<pre class="r"><code># calculate adjusted alpha
+alpha_value &lt;- 0.05 / (1 + 11 + 7)
+alpha_value</code></pre>
+<pre><code>## [1] 0.002631579</code></pre>
+</div>
+<div id="randomization-test" class="section level4">
+<h4>Randomization test</h4>
+<p>A randomization test calculating the mean difference for Circularity, Standard Deviation DAPI, and Standard Deviation GFP between homozygotes and heterozygotes was performed. The null hypothesis is that there is no difference between the mean of these three variables for heterozygotes and homozygotes. The alternative hypotheses are that for each of these variables, there is a difference between the means. For Circularity, <span class="math inline">\(91.74%\)</span> of the random mean differences are greater than the true mean difference (<span class="math inline">\(-0.0196\)</span>), so I cannot reject the null hypothesis for Circularity. For Standard Deviation DAPI, <span class="math inline">\(0%\)</span> of the random mean differences are greater than the true mean difference (<span class="math inline">\(4.487\)</span>), so I reject the null hypothesis that there is no mean difference between heterozygotes and homozygotes for Standard Deviation DAPI. For Standard Deviation GFP, <span class="math inline">\(0.2%\)</span> of the random mean differences are greater than the true mean difference (<span class="math inline">\(3.245\)</span>), so I reject the null hypothesis that there is no mean difference between heterozygotes and homozygotes for Standard Deviation GFP.</p>
+<pre class="r"><code># perform randomization tests
+## make data for randomization
+data_rand &lt;- data %&gt;%
+  select(rDNAdel, shape.Circ., StdDev.DAPI, StdDev.GFP)
+
+## compute actual mean differences
+data_rand_mean_diff &lt;- data_rand %&gt;%
+  group_by(rDNAdel) %&gt;%
+  summarize_all(mean) %&gt;%
+  select(-rDNAdel) %&gt;%
+  summarize_all(diff)
+
+data_rand_mean_diff %&gt;%
+  kbl(caption = &#39;Mean differences&#39;) %&gt;%
+  kable_styling(bootstrap_options = c(&quot;striped&quot;, &quot;hover&quot;, &quot;condensed&quot;))</code></pre>
+<table class="table table-striped table-hover table-condensed" style="margin-left: auto; margin-right: auto;">
+<caption>
+Mean differences
+</caption>
+<thead>
+<tr>
+<th style="text-align:right;">
+shape.Circ.
+</th>
+<th style="text-align:right;">
+StdDev.DAPI
+</th>
+<th style="text-align:right;">
+StdDev.GFP
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:right;">
+-0.0196128
+</td>
+<td style="text-align:right;">
+4.486824
+</td>
+<td style="text-align:right;">
+3.245352
+</td>
+</tr>
+</tbody>
+</table>
+<pre class="r"><code>## initialize vectors
+diffs_shape.Circ. &lt;- vector()
+diffs_StdDev.DAPI &lt;- vector()
+diffs_StdDev.GFP &lt;- vector()
+
+## calculate 5000 mean differences
+for (i in 1:5000){
+  rand &lt;- data_rand %&gt;%
+    mutate(rDNAdel = sample(data_rand$rDNAdel))
+ 
+  diffs_shape.Circ.[i] &lt;- rand %&gt;%
+    summarize(mean(shape.Circ.[rDNAdel == &#39;heterozygous&#39;]) - mean(shape.Circ.[rDNAdel == &#39;homozygous&#39;])) %&gt;%
+    pull()
+  
+  diffs_StdDev.DAPI[i] &lt;- rand %&gt;%
+    summarize(mean(StdDev.DAPI[rDNAdel == &#39;heterozygous&#39;]) - mean(StdDev.DAPI[rDNAdel == &#39;homozygous&#39;])) %&gt;%
+    pull()
+  
+  diffs_StdDev.GFP[i] &lt;- rand %&gt;%
+    summarize(mean(StdDev.GFP[rDNAdel == &#39;heterozygous&#39;]) - mean(StdDev.GFP[rDNAdel == &#39;homozygous&#39;])) %&gt;%
+    pull()
+}
+
+# compute values greater than test statistics
+mean(diffs_shape.Circ. &gt; pull(select(data_rand_mean_diff, shape.Circ.)))</code></pre>
+<pre><code>## [1] 0.9146</code></pre>
+<pre class="r"><code>mean(diffs_StdDev.DAPI &gt; pull(select(data_rand_mean_diff, StdDev.DAPI)))</code></pre>
+<pre><code>## [1] 0</code></pre>
+<pre class="r"><code>mean(diffs_StdDev.GFP &gt; pull(select(data_rand_mean_diff, StdDev.GFP)))</code></pre>
+<pre><code>## [1] 0.0028</code></pre>
+<pre class="r"><code>diffs &lt;- data.frame(diffs_shape.Circ., diffs_StdDev.DAPI, diffs_StdDev.GFP) %&gt;%
+  pivot_longer(starts_with(&#39;diffs&#39;), names_to = &#39;descriptor&#39;, values_to = &#39;mean_diffs&#39;) %&gt;%
+  separate(descriptor, into = c(&#39;diffs_&#39;, &#39;descriptor&#39;), sep = &#39;_&#39;) %&gt;%
+  select(-diffs_)
+
+# plot distributions
+diffs %&gt;%
+  filter(descriptor == &#39;shape.Circ.&#39;) %&gt;%
+  ggplot() +
+  geom_histogram(aes(x = mean_diffs)) +
+  geom_vline(xintercept = pull(select(data_rand_mean_diff, shape.Circ.))) +
+  labs(title = &#39;Circularity randomized mean differences&#39;,
+       x = &#39;Mean difference&#39;, y = &#39;Count&#39;) +
+  theme_bw()</code></pre>
+<p><img src="../../project/project2_files/figure-html/randomization-1.png" width="768" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>diffs %&gt;%
+  filter(descriptor == &#39;StdDev.DAPI&#39;) %&gt;%
+  ggplot() +
+  geom_histogram(aes(x = mean_diffs)) +
+  geom_vline(xintercept = pull(select(data_rand_mean_diff, StdDev.DAPI))) +
+  labs(title = &#39;DAPI standard deviation randomized mean differences&#39;,
+       x = &#39;Mean difference&#39;, y = &#39;Count&#39;) +
+  theme_bw()</code></pre>
+<p><img src="../../project/project2_files/figure-html/randomization-2.png" width="768" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>diffs %&gt;%
+  filter(descriptor == &#39;StdDev.GFP&#39;) %&gt;%
+  ggplot() +
+  geom_histogram(aes(x = mean_diffs)) +
+  geom_vline(xintercept = pull(select(data_rand_mean_diff, StdDev.GFP))) +
+  labs(title = &#39;GFP standard deviation randomized mean differences&#39;,
+       x = &#39;Mean difference&#39;, y = &#39;Count&#39;) +
+  theme_bw()</code></pre>
+<p><img src="../../project/project2_files/figure-html/randomization-3.png" width="768" style="display: block; margin: auto;" /></p>
+</div>
+</div>
+<div id="linear-regression" class="section level3">
+<h3>Linear regression</h3>
+<div id="linear-regression-model" class="section level4">
+<h4>Linear regression model</h4>
+<p>I built a linear regression model to predict Median GFP from mean-centered Median DAPI and Median mCherry, including the interaction. The predicted Median GFP for an average Median DAPI and average Median mCherry is <span class="math inline">\(0.304\)</span>. Controlling for Median mCherry, average Median GFP increases by <span class="math inline">\(0.0225\)</span> for every unit increase in average Median DAPI. Controlling for Median DAPI, average Median GFP increases by <span class="math inline">\(0.0444\)</span> for every unit increase in average Median mCherry. The slope for average Median DAPI on Median GFP is <span class="math inline">\(5.978*10^{-4}\)</span> for each unit increase in average Median mCherry. The proportion of the variation in Median GFP explained by the model is equal to <span class="math inline">\(0.0205\)</span>. The linearity assumption may not be met as Residuals vs. Fitted values does not appear linear, although this may not be the case. The assumption of normality fails as the QQplot shows that residuals do not fall along the normal line. The assumption of homoskedasticity is met as the Breush-Pagan test does not reject the null hypothesis of homoskedasticity (<span class="math inline">\(p=0.848\)</span>). Robust standard errors were computed for the model, but neither coefficient estimates nor significance were affected: Median mCherry and the interaction of Median DAPI and Median mCherry were still significant.</p>
+<pre class="r"><code># create data frame for linear regression
+data_lm &lt;- data %&gt;%
+  ## select columns
+  select(Median.GFP, Median.DAPI, Median.mCherry) %&gt;%
+  ## mean-center
+  mutate(Median.DAPI = as.numeric(scale(Median.DAPI, scale = F)),
+         Median.mCherry = as.numeric(scale(Median.mCherry, scale = F)))
+
+# build linear regression model
+fit_lm1 &lt;- lm(Median.GFP ~ Median.DAPI * Median.mCherry, data = data_lm)
+summary(fit_lm1)</code></pre>
+<pre><code>##
+## Call:
+## lm(formula = Median.GFP ~ Median.DAPI * Median.mCherry,
+data = data_lm)
+##
+## Residuals:
+## Min 1Q Median 3Q Max
+## -24.676 -11.757 -3.759 9.483 78.243
+##
+## Coefficients:
+## Estimate Std. Error t value Pr(&gt;|t|)
+## (Intercept) 3.040e+01 7.649e-01 39.747 &lt; 2e-16 ***
+## Median.DAPI 2.246e-02 1.581e-02 1.421 0.15604
+## Median.mCherry 4.438e-02 1.395e-02 3.182 0.00156 **
+## Median.DAPI:Median.mCherry 5.978e-04 3.011e-04 1.985
+0.04764 *
+## ---
+## Signif. codes: 0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1
+&#39; &#39; 1
+##
+## Residual standard error: 16.38 on 502 degrees of freedom
+## Multiple R-squared: 0.02052, Adjusted R-squared: 0.01467
+## F-statistic: 3.505 on 3 and 502 DF, p-value: 0.01533</code></pre>
+<pre class="r"><code># plot regression
+## set line colors
+mycols&lt;-c(&quot;#619CFF&quot;,&quot;#F8766D&quot;,&quot;#00BA38&quot;)
+names(mycols)&lt;-c(&quot;- 1 sd&quot;, &quot;mean&quot;, &quot;+ 1 sd&quot;)
+mycols=as.factor(mycols)
+
+## setup data for plotting
+data_lm_plot &lt;- data_lm
+
+### set Median.DAPI to its mean
+data_lm_plot &lt;- data_lm_plot %&gt;%
+  mutate(Median.DAPI = mean(data_lm$Median.DAPI))
+
+### add mean column
+data_lm_plot &lt;- data_lm_plot %&gt;%
+  mutate(mean = predict(fit_lm1, data_lm_plot))
+
+### set Median.DAPI to its mean + 1 sd
+data_lm_plot &lt;- data_lm_plot %&gt;%
+  mutate(Median.DAPI = mean(data_lm$Median.DAPI) + sd(data_lm$Median.DAPI))
+
+### add mean + 1 sd column
+data_lm_plot &lt;- data_lm_plot %&gt;%
+  mutate(plus.sd = predict(fit_lm1, data_lm_plot))
+
+### set Median.DAPI to its mean - 1 sd
+data_lm_plot &lt;- data_lm_plot %&gt;%
+  mutate(Median.DAPI = mean(data_lm$Median.DAPI) - sd(data_lm$Median.DAPI))
+
+### add mean + 1 sd column
+data_lm_plot &lt;- data_lm_plot %&gt;%
+  mutate(minus.sd = predict(fit_lm1, data_lm_plot))
+
+## plot
+data_lm %&gt;%
+  ggplot(aes(x = Median.mCherry, y = Median.GFP)) + 
+  geom_point() +
+  geom_line(data = data_lm_plot, aes(y = mean, color = &#39;mean&#39;)) +
+  geom_line(data = data_lm_plot, aes(y = plus.sd, color = &#39;+ 1 sd&#39;)) +
+  geom_line(data = data_lm_plot, aes(y = minus.sd, color = &#39;- 1 sd&#39;)) +
+  scale_color_manual(values = mycols) +
+  labs(color = &#39;Median.DAPI&#39;,
+       title = &#39;Regression interaction&#39;) +
+  theme_bw()</code></pre>
+<p><img src="../../project/project2_files/figure-html/linear%20regression-1.png" width="768" style="display: block; margin: auto;" /></p>
+<pre class="r"><code># check assumptions
+## linearity
+ggplot() +
+  geom_point(aes(fit_lm1$fitted.values, fit_lm1$residuals)) +
+  geom_hline(yintercept = 0) +
+  labs(title = &#39;Check linearity&#39;,
+       x = &#39;Fitted values&#39;, y = &#39;Residuals&#39;) +
+  theme_bw()</code></pre>
+<p><img src="../../project/project2_files/figure-html/linear%20regression-2.png" width="768" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>## normality
+### distribution of residuals
+ggplot() +
+  geom_histogram(aes(fit_lm1$residuals)) +
+  labs(title = &#39;Distribution of residuals&#39;,
+       x = &#39;Residuals&#39;, y = &#39;Count&#39;) +
+  theme_bw()</code></pre>
+<p><img src="../../project/project2_files/figure-html/linear%20regression-3.png" width="768" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>### qqplot of residuals
+ggplot() +
+  geom_qq(aes(sample = fit_lm1$residuals)) +
+  geom_qq_line(aes(sample = fit_lm1$residuals)) +
+  labs(title = &#39;QQplot of residuals&#39;, subtitle = &#39;Normal distribution&#39;) +
+  theme_bw()</code></pre>
+<p><img src="../../project/project2_files/figure-html/linear%20regression-4.png" width="768" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>## homoskedasticity
+bptest(fit_lm1)</code></pre>
+<pre><code>## 
+##  studentized Breusch-Pagan test
+## 
+## data:  fit_lm1
+## BP = 6.6256, df = 3, p-value = 0.08484</code></pre>
+<pre class="r"><code># robust SEs
+coeftest(fit_lm1, vcov = vcovHC(fit_lm1))</code></pre>
+<pre><code>##
+## t test of coefficients:
+##
+## Estimate Std. Error t value Pr(&gt;|t|)
+## (Intercept) 3.0402e+01 7.8112e-01 38.9208 &lt; 2.2e-16 ***
+## Median.DAPI 2.2462e-02 1.4827e-02 1.5149 0.1304233
+## Median.mCherry 4.4377e-02 1.3237e-02 3.3524 0.0008615
+***
+## Median.DAPI:Median.mCherry 5.9784e-04 2.6138e-04 2.2872
+0.0225972 *
+## ---
+## Signif. codes: 0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1
+&#39; &#39; 1</code></pre>
+</div>
+<div id="bootstrapped-linear-regression-model" class="section level4">
+<h4>Bootstrapped linear regression model</h4>
+<p>The same regression model with interaction was rerun and bootstrapped standard errors were computed. Original SEs are as follows: Median DAPI equals <span class="math inline">\(0.01581\)</span>, Median mCherry equals <span class="math inline">\(0.01395\)</span>, and the interaction equals <span class="math inline">\(3.011*10^{-4}\)</span>. Robust SEs are as follows: Median DAPI equals <span class="math inline">\(0.01483\)</span>, Median mCherry equals <span class="math inline">\(0.01324\)</span>, and the interaction equals <span class="math inline">\(2.614*10^{-4}\)</span>. Bootstrapped SEs are as follows: Median DAPI equals <span class="math inline">\(0.01476\)</span>, Median mCherry equals <span class="math inline">\(0.01295\)</span>, and the interaction equals <span class="math inline">\(2.562*10^{-4}\)</span>. SEs are lower for the robust SEs than the original and lower still for the bootstrapped SEs than the robust SEs. The p-values for the robust SEs were lower than for the original SEs.</p>
+<pre class="r"><code># bootstrap
+samp_distn &lt;- replicate(5000, {
+  boot_dat &lt;- sample_frac(data_lm, replace = T)
+  
+  fit &lt;- lm(Median.GFP ~ Median.DAPI * Median.mCherry, data = boot_dat)
+  coef(fit)
+})
+
+# calculate bootstrapped SEs
+samp_distn %&gt;%
+  t %&gt;%
+  as.data.frame %&gt;%
+  summarize_all(sd) %&gt;%
+  kbl(caption = &#39;Bootstrapped SEs&#39;) %&gt;%
+  kable_styling(bootstrap_options = c(&quot;striped&quot;, &quot;hover&quot;, &quot;condensed&quot;))</code></pre>
+<table class="table table-striped table-hover table-condensed" style="margin-left: auto; margin-right: auto;">
+<caption>
+(#tab:linear regression bootstrapped SEs)Bootstrapped SEs
+</caption>
+<thead>
+<tr>
+<th style="text-align:right;">
+(Intercept)
+</th>
+<th style="text-align:right;">
+Median.DAPI
+</th>
+<th style="text-align:right;">
+Median.mCherry
+</th>
+<th style="text-align:right;">
+Median.DAPI:Median.mCherry
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:right;">
+0.7648537
+</td>
+<td style="text-align:right;">
+0.0147858
+</td>
+<td style="text-align:right;">
+0.0130558
+</td>
+<td style="text-align:right;">
+0.0002607
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+<div id="logistic-regression" class="section level3">
+<h3>Logistic regression</h3>
+<div id="some-variables" class="section level4">
+<h4>Some variables</h4>
+<p>I built a logistic regression model to predict whether or not a nucleus belongs to an <em>rDNA<span class="math inline">\(\Delta\)</span></em> homozygous worm from Mean mCherry, Minimum mCherry, Integrated Density DAPI, Integrated Density GFP, Median DAPI, and Median GFP. For each unit increase in Mean mCherry, the probability of predicting a homozygote is multiplied by <span class="math inline">\(0.290\)</span>. For each unit increase in Minimum mCherry, the probability of predicting a homozygote is multiplied by <span class="math inline">\(24.450\)</span>. For each unit increase in Integrated Density DAPI, the probability of predicting a homozygote is multiplied by <span class="math inline">\(1.000\)</span>. For each unit increase in Integrated Density GFP, the probability of predicting a homozygote is multiplied by <span class="math inline">\(1.003\)</span>. For each unit increase in Median DAPI, the probability of predicting a homozygote is multiplied by <span class="math inline">\(1.000\)</span>. For each unit increase in Median GFP, the probability of predicting a homozygote is multiplied by <span class="math inline">\(1.034\)</span>. The model’s performance is great for within-sample predictions for both true positives and true negatives: accuracy equals <span class="math inline">\(0.962\)</span>, sensitivity equals <span class="math inline">\(0.969\)</span>, specificity equals <span class="math inline">\(0.959\)</span>, precision equals <span class="math inline">\(0.918\)</span>, and AUC equals <span class="math inline">\(0.990\)</span>. The AUC is very high.</p>
+<pre class="r"><code># make binary response variable
+data_glm &lt;- data %&gt;%
+  mutate(y = ifelse(rDNAdel == &#39;homozygous&#39;, 1, 0))
+
+# run logistic regression
+fit_some &lt;- glm(y ~ Mean.mCherry + Min.mCherry + IntDen.DAPI + IntDen.GFP + Median.DAPI + Median.GFP, data = data_glm, family = &#39;binomial&#39;)
+coeftest(fit_some)</code></pre>
+<pre><code>##
+## z test of coefficients:
+##
+## Estimate Std. Error z value Pr(&gt;|z|)
+## (Intercept) 1.11829674 37.77790436 0.0296 0.9764
+## Mean.mCherry -1.23912801 0.19757274 -6.2718 3.57e-10 ***
+## Min.mCherry 3.19661876 12.59785862 0.2537 0.7997
+## IntDen.DAPI -0.00012222 0.00073353 -0.1666 0.8677
+## IntDen.GFP 0.00325905 0.00419885 0.7762 0.4376
+## Median.DAPI -0.00017994 0.00686006 -0.0262 0.9791
+## Median.GFP 0.03353404 0.03505106 0.9567 0.3387
+## ---
+## Signif. codes: 0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1
+&#39; &#39; 1</code></pre>
+<pre class="r"><code>exp(coef(fit_some)) %&gt;%
+  kbl(caption = &#39;Exponentiated coefficient estimates&#39;) %&gt;%
+  kable_styling(bootstrap_options = c(&quot;striped&quot;, &quot;hover&quot;, &quot;condensed&quot;), full_width = F)</code></pre>
+<table class="table table-striped table-hover table-condensed" style="width: auto !important; margin-left: auto; margin-right: auto;">
+<caption>
+(#tab:logistic regression)Exponentiated coefficient estimates
+</caption>
+<thead>
+<tr>
+<th style="text-align:left;">
+</th>
+<th style="text-align:right;">
+x
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left;">
+(Intercept)
+</td>
+<td style="text-align:right;">
+3.0596384
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Mean.mCherry
+</td>
+<td style="text-align:right;">
+0.2896367
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Min.mCherry
+</td>
+<td style="text-align:right;">
+24.4497198
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+IntDen.DAPI
+</td>
+<td style="text-align:right;">
+0.9998778
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+IntDen.GFP
+</td>
+<td style="text-align:right;">
+1.0032644
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Median.DAPI
+</td>
+<td style="text-align:right;">
+0.9998201
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+Median.GFP
+</td>
+<td style="text-align:right;">
+1.0341026
+</td>
+</tr>
+</tbody>
+</table>
+<pre class="r"><code># confusion matrix
+table(predict = as.numeric(predict(fit_some, type = &#39;response&#39;) &gt; 0.5), truth = data_glm$y) %&gt;%
+  addmargins()</code></pre>
+<pre><code>##        truth
+## predict   0   1 Sum
+##     0   331   5 336
+##     1    14 156 170
+##     Sum 345 161 506</code></pre>
+<pre class="r"><code># class diagnostics
+probs_some &lt;- predict(fit_some, type = &#39;response&#39;)
+class_diag(probs_some, data_glm$y) %&gt;%
+  kbl(caption = &#39;In-sample class diagnostics&#39;) %&gt;%
+  kable_styling(bootstrap_options = c(&quot;striped&quot;, &quot;hover&quot;, &quot;condensed&quot;))</code></pre>
+<table class="table table-striped table-hover table-condensed" style="margin-left: auto; margin-right: auto;">
+<caption>
+(#tab:logistic regression)In-sample class diagnostics
+</caption>
+<thead>
+<tr>
+<th style="text-align:right;">
+acc
+</th>
+<th style="text-align:right;">
+sens
+</th>
+<th style="text-align:right;">
+spec
+</th>
+<th style="text-align:right;">
+ppv
+</th>
+<th style="text-align:right;">
+auc
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:right;">
+0.9624506
+</td>
+<td style="text-align:right;">
+0.9689441
+</td>
+<td style="text-align:right;">
+0.9594203
+</td>
+<td style="text-align:right;">
+0.9176471
+</td>
+<td style="text-align:right;">
+0.9901341
+</td>
+</tr>
+</tbody>
+</table>
+<pre class="r"><code># density plot logit
+logit_some &lt;- predict(fit_some, type = &#39;link&#39;)
+data_glm %&gt;%
+  mutate(logit = logit_some) %&gt;%
+  ggplot(aes(x = logit, fill = rDNAdel)) +
+  geom_density() +
+  theme_bw() +
+  labs(title = &#39;Density of log-odds by genotype&#39;)</code></pre>
+<p><img src="../../project/project2_files/figure-html/logistic%20regression-1.png" width="768" style="display: block; margin: auto;" /></p>
+<pre class="r"><code># ROC curve and AUC
+ROCplot_some &lt;- data_glm %&gt;%
+  mutate(probs = probs_some) %&gt;%
+  ggplot() +
+  geom_roc(aes(d = y, m = probs), n.cuts = 0)
+ROCplot_some</code></pre>
+<p><img src="../../project/project2_files/figure-html/logistic%20regression-2.png" width="768" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>calc_auc(ROCplot_some) %&gt;%
+  kbl(caption = &#39;In-sample AUC&#39;) %&gt;%
+  kable_styling(bootstrap_options = c(&quot;striped&quot;, &quot;hover&quot;, &quot;condensed&quot;), full_width = F)</code></pre>
+<table class="table table-striped table-hover table-condensed" style="width: auto !important; margin-left: auto; margin-right: auto;">
+<caption>
+(#tab:logistic regression)In-sample AUC
+</caption>
+<thead>
+<tr>
+<th style="text-align:left;">
+PANEL
+</th>
+<th style="text-align:right;">
+group
+</th>
+<th style="text-align:right;">
+AUC
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left;">
+1
+</td>
+<td style="text-align:right;">
+-1
+</td>
+<td style="text-align:right;">
+0.9901341
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div id="all-explanatory-variables-10-fold-cv-and-lasso" class="section level4">
+<h4>All explanatory variables, 10-fold CV, and LASSO</h4>
+<p>I built a logistic regression model to predict whether or not a nucleus belongs to an <em>rDNA<span class="math inline">\(\Delta\)</span></em> homozygous worm from all variables with no interaction. In-sample classification diagnostics were still very high for this model, but not quite as high for the more limited model above: accuracy equals <span class="math inline">\(0.960\)</span>, sensitivity equals <span class="math inline">\(0.931\)</span>, specificity equals <span class="math inline">\(0.974\)</span>, precision equals <span class="math inline">\(0.943\)</span>, and AUC equals <span class="math inline">\(0.953\)</span>. 10-fold cross validation of this model revealed some overfitting: accuracy equals <span class="math inline">\(0.927\)</span>, sensitivity equals <span class="math inline">\(0.879\)</span>, specificity equals <span class="math inline">\(0.954\)</span>, precision equals <span class="math inline">\(0.892\)</span>, and AUC equals <span class="math inline">\(0.930\)</span>. The decreased sensitivity and precision indicate that the model is overfitted when it comes to predicting true positives. The AUC is still great, although it is noticeably lower than the in-sample AUC.</p>
+<p>LASSO was performed on this model to give the simplest model using <code>lambda.1se</code>. LASSO retained the following variables: position low, position medium, Minor axis length, Angle, Roundness, Solidity, Mean GFP, Mean mCherry, Standard Deviation DAPI, Standard Deviation mCherry, Minimum DAPI, Minimum GFP, Maximum DAPI, Maximum GFP, Maximum mCherry, and Median DAPI. 10-fold cross validation was performed for this simplified model using the variables selected by LASSO, which gave an AUC of <span class="math inline">\(0.991\)</span>. This is a great AUC and is noticeably higher than the 10-fold CV AUC for the full model (<span class="math inline">\(0.930\)</span>). The LASSO model appears have gotten past the issue of overfitting.</p>
+<pre class="r"><code># make binary response variable
+data_glm &lt;- data %&gt;%
+  mutate(y = ifelse(rDNAdel == &#39;homozygous&#39;, 1, 0)) %&gt;%
+  select(-rDNAdel)
+
+# run logistic regression
+fit_all &lt;- glm(y ~ ., data = data_glm, family = &#39;binomial&#39;)
+coeftest(fit_all)</code></pre>
+<pre><code>##
+## z test of coefficients:
+##
+## Estimate Std. Error z value Pr(&gt;|z|)
+## (Intercept) 1.2806e+15 6.1353e+07 20872874 &lt; 2.2e-16 ***
+## positionlow 8.4815e+13 7.6196e+06 11131209 &lt; 2.2e-16 ***
+## positionmedium -2.4122e+13 7.4558e+06 -3235350 &lt; 2.2e-16
+***
+## shape.Area -1.5920e+14 5.7664e+06 -27608515 &lt; 2.2e-16
+***
+## shape.Major 6.7424e+13 1.1191e+07 6025075 &lt; 2.2e-16 ***
+## shape.Minor 1.9097e+14 1.5747e+07 12127187 &lt; 2.2e-16 ***
+## shape.Angle 1.4185e+12 5.9598e+04 23800540 &lt; 2.2e-16 ***
+## shape.Circ.  8.3104e+14 5.4103e+07 15360346 &lt; 2.2e-16
+***
+## shape.AR -3.6498e+13 1.5546e+07 -2347816 &lt; 2.2e-16 ***
+## shape.Round -1.7232e+14 4.2972e+07 -4010066 &lt; 2.2e-16
+***
+## shape.Solidity -1.1405e+15 6.3006e+07 -18101460 &lt;
+2.2e-16 ***
+## Mean.DAPI 2.0137e+13 1.1131e+06 18091781 &lt; 2.2e-16 ***
+## Mean.GFP 9.1427e+13 3.1791e+06 28758732 &lt; 2.2e-16 ***
+## Mean.mCherry -2.4365e+14 6.8402e+05 -356210766 &lt; 2.2e-16
+***
+## StdDev.DAPI 6.4499e+12 7.4437e+05 8664872 &lt; 2.2e-16 ***
+## StdDev.GFP -3.1351e+13 1.8059e+06 -17359857 &lt; 2.2e-16
+***
+## StdDev.mCherry 1.4083e+13 4.9734e+05 28315680 &lt; 2.2e-16
+***
+## Min.DAPI 2.0880e+12 3.4067e+05 6129045 &lt; 2.2e-16 ***
+## Min.GFP 1.1275e+13 3.3938e+06 3322313 &lt; 2.2e-16 ***
+## Min.mCherry 3.4487e+13 6.7678e+05 50958015 &lt; 2.2e-16 ***
+## Max.DAPI -2.3038e+12 2.5229e+05 -9131390 &lt; 2.2e-16 ***
+## Max.GFP 8.9002e+11 1.2937e+05 6879428 &lt; 2.2e-16 ***
+## Max.mCherry 1.2306e+12 1.2934e+05 9514402 &lt; 2.2e-16 ***
+## IntDen.DAPI 4.7709e+11 1.9816e+04 24076411 &lt; 2.2e-16 ***
+## IntDen.GFP 6.1582e+11 4.5940e+04 13405044 &lt; 2.2e-16 ***
+## IntDen.mCherry 1.3134e+12 2.0501e+04 64065161 &lt; 2.2e-16
+***
+## Median.DAPI -2.0125e+13 8.2096e+05 -24514133 &lt; 2.2e-16
+***
+## Median.GFP -7.9166e+13 2.5760e+06 -30732673 &lt; 2.2e-16
+***
+## Median.mCherry 1.8915e+14 5.2898e+05 357565777 &lt; 2.2e-16
+***
+## ---
+## Signif. codes: 0 &#39;***&#39; 0.001 &#39;**&#39; 0.01 &#39;*&#39; 0.05 &#39;.&#39; 0.1
+&#39; &#39; 1</code></pre>
+<pre class="r"><code># in-sample classification diagnostics
+probs_all &lt;- predict(fit_all, type = &#39;response&#39;)
+class_diag(probs_all, data_glm$y) %&gt;%
+  kbl(caption = &#39;In-sample class diagnostics&#39;) %&gt;%
+  kable_styling(bootstrap_options = c(&quot;striped&quot;, &quot;hover&quot;, &quot;condensed&quot;))</code></pre>
+<table class="table table-striped table-hover table-condensed" style="margin-left: auto; margin-right: auto;">
+<caption>
+(#tab:logistic regression all)In-sample class diagnostics
+</caption>
+<thead>
+<tr>
+<th style="text-align:right;">
+acc
+</th>
+<th style="text-align:right;">
+sens
+</th>
+<th style="text-align:right;">
+spec
+</th>
+<th style="text-align:right;">
+ppv
+</th>
+<th style="text-align:right;">
+auc
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:right;">
+0.9604743
+</td>
+<td style="text-align:right;">
+0.931677
+</td>
+<td style="text-align:right;">
+0.973913
+</td>
+<td style="text-align:right;">
+0.9433962
+</td>
+<td style="text-align:right;">
+0.952795
+</td>
+</tr>
+</tbody>
+</table>
+<pre class="r"><code># 10-fold CV
+k=10
+
+data_glm_random &lt;- data_glm %&gt;%
+  sample_frac()
+folds &lt;- ntile(1:nrow(data_glm_random), n = 10)
+
+diags &lt;- NULL
+for(i in 1:k){
+  train &lt;- data_glm_random[folds != i, ]
+  test &lt;- data_glm_random[folds == i, ]
+  truth &lt;- test$y
+  
+  fit &lt;- glm(y ~ ., data = train, family = &#39;binomial&#39;)
+  probs &lt;- predict(fit, newdata = test, type = &#39;response&#39;)
+  
+  diags &lt;- rbind(diags, class_diag(probs, truth))
+}
+
+summarize_all(diags, mean) %&gt;%
+  kbl(caption = &#39;10-fold CV class diagnostics&#39;) %&gt;%
+  kable_styling(bootstrap_options = c(&quot;striped&quot;, &quot;hover&quot;, &quot;condensed&quot;))</code></pre>
+<table class="table table-striped table-hover table-condensed" style="margin-left: auto; margin-right: auto;">
+<caption>
+(#tab:logistic regression all)10-fold CV class diagnostics
+</caption>
+<thead>
+<tr>
+<th style="text-align:right;">
+acc
+</th>
+<th style="text-align:right;">
+sens
+</th>
+<th style="text-align:right;">
+spec
+</th>
+<th style="text-align:right;">
+ppv
+</th>
+<th style="text-align:right;">
+auc
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:right;">
+0.8130588
+</td>
+<td style="text-align:right;">
+0.9118241
+</td>
+<td style="text-align:right;">
+0.7654644
+</td>
+<td style="text-align:right;">
+0.7208197
+</td>
+<td style="text-align:right;">
+0.8451858
+</td>
+</tr>
+</tbody>
+</table>
+<pre class="r"><code># LASSO
+## put predictors and response in matrices
+y &lt;- as.logical(as.matrix(data_glm$y))
+x &lt;- model.matrix(fit_all)[, -1]
+
+## perform LASSO
+cv &lt;- cv.glmnet(x, y, family = &#39;binomial&#39;)
+lasso &lt;- glmnet(x, y, family=&quot;binomial&quot;, lambda = cv$lambda.1se)
+coef(lasso)</code></pre>
+<pre><code>## 29 x 1 sparse Matrix of class &quot;dgCMatrix&quot;
+##                          s0
+## (Intercept)     6.620947704
+## positionlow     0.286385553
+## positionmedium -0.156243176
+## shape.Area      .          
+## shape.Major     .          
+## shape.Minor     0.078292667
+## shape.Angle     0.005638077
+## shape.Circ.     .          
+## shape.AR        .          
+## shape.Round     0.787717541
+## shape.Solidity -2.594643153
+## Mean.DAPI       .          
+## Mean.GFP        0.027037910
+## Mean.mCherry   -0.086411828
+## StdDev.DAPI     0.060412157
+## StdDev.GFP      .          
+## StdDev.mCherry -0.611249475
+## Min.DAPI        0.030157412
+## Min.GFP         0.526562027
+## Min.mCherry     .          
+## Max.DAPI       -0.011598983
+## Max.GFP         0.010763862
+## Max.mCherry     0.020412739
+## IntDen.DAPI     .          
+## IntDen.GFP      .          
+## IntDen.mCherry  .          
+## Median.DAPI    -0.009025927
+## Median.GFP      .          
+## Median.mCherry  .</code></pre>
+<pre class="r"><code># 10-fold CV LASSO
+data_glm_lasso &lt;- data_glm %&gt;%
+  mutate(low = ifelse(position == &#39;low&#39;, 1, 0),
+         medium = ifelse(position == &#39;medium&#39;, 1, 0),
+         high = ifelse(position == &#39;high&#39;, 1, 0))
+
+k=10
+
+data_glm_random &lt;- data_glm_lasso %&gt;%
+  sample_frac()
+folds &lt;- ntile(1:nrow(data_glm_random), n = 10)
+
+diags &lt;- NULL
+for(i in 1:k){
+  train &lt;- data_glm_random[folds != i, ]
+  test &lt;- data_glm_random[folds == i, ]
+  truth &lt;- test$y
+  
+  fit &lt;- glm(y ~ low + medium + shape.Minor + shape.Angle + shape.Round + shape.Solidity + Mean.GFP + Mean.mCherry + StdDev.DAPI + StdDev.mCherry + Min.DAPI + Min.GFP + Max.DAPI + Max.GFP + Max.mCherry + Median.DAPI,
+             data = train, family = &#39;binomial&#39;)
+  probs &lt;- predict(fit, newdata = test, type = &#39;response&#39;)
+  
+  diags &lt;- rbind(diags, class_diag(probs, truth))
+}
+
+summarize_all(diags, mean)%&gt;%
+  kbl(caption = &#39;10-fold CV LASSO class diagnostics&#39;) %&gt;%
+  kable_styling(bootstrap_options = c(&quot;striped&quot;, &quot;hover&quot;, &quot;condensed&quot;))</code></pre>
+<table class="table table-striped table-hover table-condensed" style="margin-left: auto; margin-right: auto;">
+<caption>
+(#tab:logistic regression all)10-fold CV LASSO class diagnostics
+</caption>
+<thead>
+<tr>
+<th style="text-align:right;">
+acc
+</th>
+<th style="text-align:right;">
+sens
+</th>
+<th style="text-align:right;">
+spec
+</th>
+<th style="text-align:right;">
+ppv
+</th>
+<th style="text-align:right;">
+auc
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:right;">
+0.9644706
+</td>
+<td style="text-align:right;">
+0.959905
+</td>
+<td style="text-align:right;">
+0.9683907
+</td>
+<td style="text-align:right;">
+0.9372112
+</td>
+<td style="text-align:right;">
+0.9925624
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+</div>
+
+            
+        <hr>         <div class="related-posts">
+                <h5>Related Posts</h5>
+                
+              </div> 
+            </div>
+          </div>
+
+   <hr>  <div class="disqus">
+  <div id="disqus_thread"></div>
+  <script type="text/javascript">
+
+    (function() {
+      
+      
+      if (window.location.hostname == "localhost")
+        return;
+
+      var disqus_shortname = '';
+      var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+      dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+      (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    })();
+  </script>
+  <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+  <a href="http://disqus.com/" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+</div> 
+        </div>
+      </div>
+    </div>
+
+    
+    <footer>
+  <div id="footer">
+    <div class="container">
+      <p class="text-muted">&copy; All rights reserved. Powered by <a href="https://gohugo.io/">Hugo</a> and
+      <a href="http://www.github.com/nurlansu/hugo-sustain/">sustain</a> with ♥</p>
+    </div>
+  </div>
+</footer>
+<div class="footer"></div>
+
+
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
+
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous"></script>
+<script src="../../js/docs.min.js"></script>
+<script src="../../js/main.js"></script>
+
+<script src="../../js/ie10-viewport-bug-workaround.js"></script>
+
+
+    
+  </body>
+</html>

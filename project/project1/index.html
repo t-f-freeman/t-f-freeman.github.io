@@ -1,0 +1,2485 @@
+<!DOCTYPE html>
+<html lang="en-US">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="author" content="Trevor Freeman" />
+    
+    <link rel="shortcut icon" type="image/x-icon" href="../../img/favicon.ico">
+    <title>Project 1: Exploratory Data Analysis</title>
+    <meta name="generator" content="Hugo 0.83.1" />
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" integrity="sha384-BVYiiSIFeK1dGmJRAkycuHAHRg32OmUcww7on3RYdg4Va+PmSTsz/K68vbdEjh4u" crossorigin="anonymous">
+    <link rel="stylesheet" type="text/css" href="../../css/main.css" />
+    <link rel="stylesheet" type="text/css" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css" />
+    <link rel="stylesheet" type="text/css" href="https://fonts.googleapis.com/css?family=Source+Sans+Pro:200,400,200bold,400old" />
+    
+    <!--[if lt IE 9]>
+			<script src="https://oss.maxcdn.com/libs/html5shiv/3.7.0/html5shiv.js"></script>
+			<script src="https://oss.maxcdn.com/libs/respond.js/1.4.2/respond.min.js"></script>
+		<![endif]-->
+
+    
+  </head>
+
+  <body>
+    <div id="wrap">
+      
+      <nav class="navbar navbar-default">
+  <div class="container">
+    <div class="navbar-header">
+      <a class="navbar-brand" href="../../"><i class="fa fa-home"></i></a>
+      <button type="button" class="navbar-toggle" data-toggle="collapse" data-target="#navbar">
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+        <span class="icon-bar"></span>
+      </button>
+    </div>
+    <div class="navbar-collapse collapse" id="navbar">
+      <ul class="nav navbar-nav navbar-right">
+      
+        
+        <li><a href="../../post/">BLOG</a></li>
+        
+        <li><a href="../../projects/">PROJECTS</a></li>
+        
+        <li><a href="../../resume/">RESUME</a></li>
+        
+      
+      </ul>
+    </div>
+  </div>
+</nav>
+
+      <div class="container">
+        <div class="blog-post">
+          <h3>
+            <strong><a href="../../project/project1/">Project 1: Exploratory Data Analysis</a></strong>
+          </h3>
+        </div>
+ 
+<div class="blog-title">
+          <h4>
+         January 1, 0001 
+            &nbsp;&nbsp;
+            
+          </h4>
+        </div>
+
+        <div class="panel panel-default">
+          <div class="panel-body">
+            <div class="blogpost">
+              
+<script src="../../rmarkdown-libs/kePrint/kePrint.js"></script>
+<link href="../../rmarkdown-libs/lightable/lightable.css" rel="stylesheet" />
+
+
+<div id="data-wrangling-and-data-exploration" class="section level2">
+<h2>Data Wrangling and Data Exploration</h2>
+<div id="introduction" class="section level3">
+<h3>0. Introduction</h3>
+<p><em>Ribosomes, the protein factories of the cell, are composed largely of RNA which is transcribed from ribosomal DNA (rDNA) repeat arrays. The nucleolus, the largest nuclear body, forms around these rDNA repeats. Aside from being the site of the initial steps of ribosome biogenesis, the nucleolus is hypothesized to function in organizing the genome in 3D space. One of these organizing structures of DNA is the genomic loci that contact the nucleolus, called nucleolus associated domains (NADs). These have been identified in several model organisms but have not been interrogated in the nematode Caenorhabditis elegans. My thesis project is focused around elucidating the role of the nucleolus in genome organization using C. elegans as a model organism, so the existence and identity of NADs is an important part of my research. NADs are classically identified by sequencing DNA that are associated with biochemically purified nucleoli, but they can also be approximated by analyzing chromatin conformation capture (Hi-C) data for genomic loci that contact the rDNA locus.</em></p>
+<p><em>For this project, I have four datasets of previously published C. elegans Hi-C data for which I have extracted the Knight-Ruiz (KR) normalized observed/expected contact scores between rDNA and all genomic loci at a binsize of 10kb. These data are in bedGraph format, a standard format that contains the following variables: chromosome, start coordinate, end coordinate, and score. There are two biological replicates, and because of the size of the raw sequence read files, each replicate is split into two files. I am interested in attempting to identify C. elegans NADs using this Hi-C data. If NADs exist in this animal, they should be present in both replicates and in the two datasets of each replicate. Thus, I am interested in interrogating the correlations between these datasets and attempting to identify regions of high contacts with the rDNA.</em></p>
+<pre class="r"><code>library(tidyverse)
+library(kableExtra)
+library(RColorBrewer)
+library(cluster)</code></pre>
+<pre class="r"><code>column_names &lt;- c(&quot;chr&quot;, &quot;start&quot;, &quot;end&quot;, &quot;score&quot;)
+
+rep1.1 &lt;- read_tsv(&quot;~/personal/projects/project1/data/aligned_SRR9286043_GSM3884598/inter_30_chrI-15060000-15060000_all_oe_KR_10000.bedGraph&quot;, 
+    col_names = column_names)
+rep1.2 &lt;- read_tsv(&quot;~/personal/projects/project1/data/aligned_SRR9286044_GSM3884598/inter_30_chrI-15060000-15060000_all_oe_KR_10000.bedGraph&quot;, 
+    col_names = column_names)
+
+rep2.1 &lt;- read_tsv(&quot;~/personal/projects/project1/data/aligned_SRR9286045_GSM3884599/inter_30_chrI-15060000-15060000_all_oe_KR_10000.bedGraph&quot;, 
+    col_names = column_names)
+rep2.2 &lt;- read_tsv(&quot;~/personal/projects/project1/data/aligned_SRR9286046_GSM3884599/inter_30_chrI-15060000-15060000_all_oe_KR_10000.bedGraph&quot;, 
+    col_names = column_names)</code></pre>
+</div>
+<div id="joiningmergingtidying" class="section level3">
+<h3>1. Joining/Merging/Tidying</h3>
+<p><em>I joined all of the datasets using a full join because I did not want to drop any datapoints. The datasets were joined by merging regions at identical genomic loci, i.e. same chromosome, start, and end coordinates. I replaced <code>NA</code> with <code>0</code> to not lose any potentially meaningful loci from other datasets. I think this is exceptable because an <code>NA</code> after a join is reasonably a contact score of <code>0</code>.</em></p>
+<pre class="r"><code>joint_wide &lt;- rep1.1 %&gt;% full_join(rep1.2, suffix = c(&quot;.rep1.1&quot;, 
+    &quot;.rep1.2&quot;), by = column_names[1:3]) %&gt;% full_join(rep2.1, 
+    by = column_names[1:3]) %&gt;% full_join(rep2.2, suffix = c(&quot;.rep2.1&quot;, 
+    &quot;.rep2.2&quot;), by = column_names[1:3]) %&gt;% arrange(chr, start) %&gt;% 
+    mutate_all(funs(replace_na(., 0)))</code></pre>
+<p><em>The joined dataset was tidied using <code>pivot_longer</code>. This was done so that all contact scores would be in a single variable and to add a variable for replicate and the dataset. The replicate and dataset were separated to facilitate summary statistics for the replicates without being split by dataset, but the dataset information is still potentially useful for later steps. The datasets were also modified to differentiate between datasets belonging to replicate 1 and datasets belonging to replicate 2: the simple 1 vs 2 encoding of these could lead to confusion.</em></p>
+<pre class="r"><code>joint_long &lt;- joint_wide %&gt;% pivot_longer(starts_with(&quot;score&quot;), 
+    names_to = &quot;replicate.dataset&quot;, names_prefix = &quot;score.&quot;, 
+    values_to = &quot;score&quot;) %&gt;% mutate(replicate.dataset = case_when(replicate.dataset == 
+    &quot;rep1.1&quot; ~ &quot;rep1.1&quot;, replicate.dataset == &quot;rep1.2&quot; ~ &quot;rep1.2&quot;, 
+    replicate.dataset == &quot;rep2.1&quot; ~ &quot;rep2.3&quot;, replicate.dataset == 
+        &quot;rep2.2&quot; ~ &quot;rep2.4&quot;)) %&gt;% separate(replicate.dataset, 
+    into = c(&quot;replicate&quot;, &quot;dataset&quot;), sep = &quot;\\.&quot;) %&gt;% mutate(dataset = factor(dataset, 
+    levels = c(1, 2, 3, 4)))</code></pre>
+</div>
+<div id="wrangling" class="section level3">
+<h3>2. Wrangling</h3>
+<p><em>Summary statistics (mean, median, max, standard deviation, variance, and interquartile range) were computed for contact scores of both datasets of both replicates. This was first performed for all observations genome-wide. These statistics show that the genome-wide contact scores for replicate 1 tend to be higher on average than those for replicate 2. Replicate 1 is also more variable than replicate 2. Although both datasets for replicate 2 had similar mean and median values, replicate 2 dataset 1 was more variable than replicate 2 dataset 2. Next, summary statistics were calculated for contact scores grouped by chromosomes. The summary statistics do not seem to be biased toward any one chromosome, and the same patterns from the genome-wide statistics seem to hold largely true here..</em></p>
+<pre class="r"><code>joint_wide %&gt;% summarize_at(vars(score.rep1.1:score.rep2.2), 
+    list(mean = mean, median = median, max = max, sd = sd, var = var, 
+        IQR = IQR)) %&gt;% kbl() %&gt;% kable_styling(fixed_thead = T, 
+    font_size = 10, position = &quot;left&quot;, full_width = F, bootstrap_options = c(&quot;striped&quot;, 
+        &quot;responsive&quot;, &quot;condensed&quot;))</code></pre>
+<table class="table table-striped table-responsive table-condensed" style="font-size: 10px; width: auto !important; ">
+<thead>
+<tr>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep1.1_mean
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep1.2_mean
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep2.1_mean
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep2.2_mean
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep1.1_median
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep1.2_median
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep2.1_median
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep2.2_median
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep1.1_max
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep1.2_max
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep2.1_max
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep2.2_max
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep1.1_sd
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep1.2_sd
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep2.1_sd
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep2.2_sd
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep1.1_var
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep1.2_var
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep2.1_var
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep2.2_var
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep1.1_IQR
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep1.2_IQR
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep2.1_IQR
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep2.2_IQR
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:right;">
+4.444305
+</td>
+<td style="text-align:right;">
+4.45933
+</td>
+<td style="text-align:right;">
+2.023325
+</td>
+<td style="text-align:right;">
+1.999305
+</td>
+<td style="text-align:right;">
+4.314985
+</td>
+<td style="text-align:right;">
+4.332129
+</td>
+<td style="text-align:right;">
+1.959579
+</td>
+<td style="text-align:right;">
+1.981343
+</td>
+<td style="text-align:right;">
+18.87713
+</td>
+<td style="text-align:right;">
+19.68138
+</td>
+<td style="text-align:right;">
+11.0243
+</td>
+<td style="text-align:right;">
+7.798891
+</td>
+<td style="text-align:right;">
+2.1664
+</td>
+<td style="text-align:right;">
+2.041247
+</td>
+<td style="text-align:right;">
+0.9435337
+</td>
+<td style="text-align:right;">
+0.5568109
+</td>
+<td style="text-align:right;">
+4.693289
+</td>
+<td style="text-align:right;">
+4.166689
+</td>
+<td style="text-align:right;">
+0.8902559
+</td>
+<td style="text-align:right;">
+0.3100383
+</td>
+<td style="text-align:right;">
+2.871777
+</td>
+<td style="text-align:right;">
+2.662162
+</td>
+<td style="text-align:right;">
+1.230157
+</td>
+<td style="text-align:right;">
+0.7132943
+</td>
+</tr>
+</tbody>
+</table>
+<pre class="r"><code>joint_wide %&gt;% group_by(chr) %&gt;% summarize_at(vars(score.rep1.1:score.rep2.2), 
+    list(mean = mean, median = median, max = max, sd = sd, var = var, 
+        IQR = IQR)) %&gt;% kbl() %&gt;% kable_styling(fixed_thead = T, 
+    font_size = 10, position = &quot;left&quot;, full_width = F, bootstrap_options = c(&quot;striped&quot;, 
+        &quot;responsive&quot;, &quot;condensed&quot;))</code></pre>
+<table class="table table-striped table-responsive table-condensed" style="font-size: 10px; width: auto !important; ">
+<thead>
+<tr>
+<th style="text-align:left;position: sticky; top:0; background-color: #FFFFFF;">
+chr
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep1.1_mean
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep1.2_mean
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep2.1_mean
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep2.2_mean
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep1.1_median
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep1.2_median
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep2.1_median
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep2.2_median
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep1.1_max
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep1.2_max
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep2.1_max
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep2.2_max
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep1.1_sd
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep1.2_sd
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep2.1_sd
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep2.2_sd
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep1.1_var
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep1.2_var
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep2.1_var
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep2.2_var
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep1.1_IQR
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep1.2_IQR
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep2.1_IQR
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep2.2_IQR
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left;">
+chrI
+</td>
+<td style="text-align:right;">
+3.807246
+</td>
+<td style="text-align:right;">
+3.843826
+</td>
+<td style="text-align:right;">
+2.186616
+</td>
+<td style="text-align:right;">
+2.140651
+</td>
+<td style="text-align:right;">
+3.791251
+</td>
+<td style="text-align:right;">
+3.806401
+</td>
+<td style="text-align:right;">
+2.132712
+</td>
+<td style="text-align:right;">
+2.133464
+</td>
+<td style="text-align:right;">
+10.78604
+</td>
+<td style="text-align:right;">
+10.67722
+</td>
+<td style="text-align:right;">
+11.024295
+</td>
+<td style="text-align:right;">
+4.524207
+</td>
+<td style="text-align:right;">
+1.730178
+</td>
+<td style="text-align:right;">
+1.685605
+</td>
+<td style="text-align:right;">
+0.9393102
+</td>
+<td style="text-align:right;">
+0.6141156
+</td>
+<td style="text-align:right;">
+2.993516
+</td>
+<td style="text-align:right;">
+2.841265
+</td>
+<td style="text-align:right;">
+0.8823037
+</td>
+<td style="text-align:right;">
+0.3771380
+</td>
+<td style="text-align:right;">
+2.345737
+</td>
+<td style="text-align:right;">
+2.251772
+</td>
+<td style="text-align:right;">
+1.183865
+</td>
+<td style="text-align:right;">
+0.7974184
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+chrII
+</td>
+<td style="text-align:right;">
+4.556645
+</td>
+<td style="text-align:right;">
+4.576828
+</td>
+<td style="text-align:right;">
+1.998917
+</td>
+<td style="text-align:right;">
+1.995239
+</td>
+<td style="text-align:right;">
+4.439665
+</td>
+<td style="text-align:right;">
+4.451974
+</td>
+<td style="text-align:right;">
+1.924754
+</td>
+<td style="text-align:right;">
+1.975831
+</td>
+<td style="text-align:right;">
+12.45108
+</td>
+<td style="text-align:right;">
+13.17269
+</td>
+<td style="text-align:right;">
+5.924825
+</td>
+<td style="text-align:right;">
+7.682052
+</td>
+<td style="text-align:right;">
+2.155035
+</td>
+<td style="text-align:right;">
+1.964236
+</td>
+<td style="text-align:right;">
+0.8949145
+</td>
+<td style="text-align:right;">
+0.5337473
+</td>
+<td style="text-align:right;">
+4.644174
+</td>
+<td style="text-align:right;">
+3.858222
+</td>
+<td style="text-align:right;">
+0.8008721
+</td>
+<td style="text-align:right;">
+0.2848862
+</td>
+<td style="text-align:right;">
+2.967781
+</td>
+<td style="text-align:right;">
+2.619886
+</td>
+<td style="text-align:right;">
+1.170783
+</td>
+<td style="text-align:right;">
+0.6550533
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+chrIII
+</td>
+<td style="text-align:right;">
+4.071244
+</td>
+<td style="text-align:right;">
+4.120320
+</td>
+<td style="text-align:right;">
+1.947399
+</td>
+<td style="text-align:right;">
+1.924953
+</td>
+<td style="text-align:right;">
+3.922814
+</td>
+<td style="text-align:right;">
+3.950192
+</td>
+<td style="text-align:right;">
+1.880392
+</td>
+<td style="text-align:right;">
+1.906918
+</td>
+<td style="text-align:right;">
+14.61011
+</td>
+<td style="text-align:right;">
+19.68138
+</td>
+<td style="text-align:right;">
+6.095012
+</td>
+<td style="text-align:right;">
+7.798891
+</td>
+<td style="text-align:right;">
+2.048393
+</td>
+<td style="text-align:right;">
+1.967173
+</td>
+<td style="text-align:right;">
+0.9552962
+</td>
+<td style="text-align:right;">
+0.5533686
+</td>
+<td style="text-align:right;">
+4.195913
+</td>
+<td style="text-align:right;">
+3.869769
+</td>
+<td style="text-align:right;">
+0.9125908
+</td>
+<td style="text-align:right;">
+0.3062168
+</td>
+<td style="text-align:right;">
+2.581860
+</td>
+<td style="text-align:right;">
+2.502223
+</td>
+<td style="text-align:right;">
+1.195916
+</td>
+<td style="text-align:right;">
+0.6999038
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+chrIV
+</td>
+<td style="text-align:right;">
+4.571567
+</td>
+<td style="text-align:right;">
+4.522894
+</td>
+<td style="text-align:right;">
+1.975334
+</td>
+<td style="text-align:right;">
+1.978967
+</td>
+<td style="text-align:right;">
+4.469684
+</td>
+<td style="text-align:right;">
+4.438525
+</td>
+<td style="text-align:right;">
+1.911207
+</td>
+<td style="text-align:right;">
+1.979717
+</td>
+<td style="text-align:right;">
+13.17741
+</td>
+<td style="text-align:right;">
+13.14126
+</td>
+<td style="text-align:right;">
+6.491957
+</td>
+<td style="text-align:right;">
+4.064417
+</td>
+<td style="text-align:right;">
+2.239227
+</td>
+<td style="text-align:right;">
+2.128935
+</td>
+<td style="text-align:right;">
+1.0024016
+</td>
+<td style="text-align:right;">
+0.5720500
+</td>
+<td style="text-align:right;">
+5.014139
+</td>
+<td style="text-align:right;">
+4.532365
+</td>
+<td style="text-align:right;">
+1.0048090
+</td>
+<td style="text-align:right;">
+0.3272412
+</td>
+<td style="text-align:right;">
+3.077665
+</td>
+<td style="text-align:right;">
+2.769570
+</td>
+<td style="text-align:right;">
+1.265891
+</td>
+<td style="text-align:right;">
+0.7309421
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+chrV
+</td>
+<td style="text-align:right;">
+5.091355
+</td>
+<td style="text-align:right;">
+5.081031
+</td>
+<td style="text-align:right;">
+2.039496
+</td>
+<td style="text-align:right;">
+2.021615
+</td>
+<td style="text-align:right;">
+4.974190
+</td>
+<td style="text-align:right;">
+4.993114
+</td>
+<td style="text-align:right;">
+1.982232
+</td>
+<td style="text-align:right;">
+2.008091
+</td>
+<td style="text-align:right;">
+18.87713
+</td>
+<td style="text-align:right;">
+14.77525
+</td>
+<td style="text-align:right;">
+7.413114
+</td>
+<td style="text-align:right;">
+4.267522
+</td>
+<td style="text-align:right;">
+2.331140
+</td>
+<td style="text-align:right;">
+2.156891
+</td>
+<td style="text-align:right;">
+0.9270719
+</td>
+<td style="text-align:right;">
+0.5416486
+</td>
+<td style="text-align:right;">
+5.434214
+</td>
+<td style="text-align:right;">
+4.652179
+</td>
+<td style="text-align:right;">
+0.8594624
+</td>
+<td style="text-align:right;">
+0.2933832
+</td>
+<td style="text-align:right;">
+2.961355
+</td>
+<td style="text-align:right;">
+2.713840
+</td>
+<td style="text-align:right;">
+1.237240
+</td>
+<td style="text-align:right;">
+0.7152796
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+chrX
+</td>
+<td style="text-align:right;">
+4.305497
+</td>
+<td style="text-align:right;">
+4.363247
+</td>
+<td style="text-align:right;">
+1.991098
+</td>
+<td style="text-align:right;">
+1.932874
+</td>
+<td style="text-align:right;">
+4.199104
+</td>
+<td style="text-align:right;">
+4.241719
+</td>
+<td style="text-align:right;">
+1.930787
+</td>
+<td style="text-align:right;">
+1.915968
+</td>
+<td style="text-align:right;">
+13.15810
+</td>
+<td style="text-align:right;">
+11.96396
+</td>
+<td style="text-align:right;">
+5.956284
+</td>
+<td style="text-align:right;">
+4.372796
+</td>
+<td style="text-align:right;">
+2.103747
+</td>
+<td style="text-align:right;">
+1.999511
+</td>
+<td style="text-align:right;">
+0.9225764
+</td>
+<td style="text-align:right;">
+0.5034385
+</td>
+<td style="text-align:right;">
+4.425749
+</td>
+<td style="text-align:right;">
+3.998045
+</td>
+<td style="text-align:right;">
+0.8511473
+</td>
+<td style="text-align:right;">
+0.2534503
+</td>
+<td style="text-align:right;">
+2.854088
+</td>
+<td style="text-align:right;">
+2.631474
+</td>
+<td style="text-align:right;">
+1.223742
+</td>
+<td style="text-align:right;">
+0.6670651
+</td>
+</tr>
+</tbody>
+</table>
+<p><em>Summary statistics (mean, median, max, standard deviation, variance, and interquartile range) were computed for contact scores of both datasets of both replicates. I determined whether each locus was at the chromosome arm or center as these may have differential contacts with the rDNA. The mean value for each replicate was also calculated. Bins with an average contact score of 0 were removed, and summary statistics data grouped by chromosome and the localization within the arm or center were computed. There isn’t much of a difference between the arm and center contact scores for each chromosome.</em></p>
+<pre class="r"><code>joint_wide %&gt;% group_by(chr) %&gt;% mutate(class = ifelse(end &gt;= 
+    max(end)/3 &amp; end &gt;= max(end)/3, &quot;center&quot;, &quot;arm&quot;)) %&gt;% select(!c(start, 
+    end)) %&gt;% rowwise() %&gt;% mutate(score.rep1 = mean(c(score.rep1.1, 
+    score.rep1.2))) %&gt;% rowwise() %&gt;% mutate(score.rep2 = mean(c(score.rep2.1, 
+    score.rep2.2))) %&gt;% filter(score.rep1 &gt; 0 | score.rep2 &gt; 
+    0) %&gt;% group_by(chr, class) %&gt;% summarize_at(vars(score.rep1.1:score.rep2.2, 
+    score.rep1, score.rep2), list(mean = mean, median = median, 
+    max = max, sd = sd, var = var, IQR = IQR)) %&gt;% arrange(chr, 
+    class) %&gt;% kbl() %&gt;% kable_styling(fixed_thead = T, font_size = 10, 
+    position = &quot;left&quot;, full_width = F, bootstrap_options = c(&quot;striped&quot;, 
+        &quot;responsive&quot;, &quot;condensed&quot;))</code></pre>
+<table class="table table-striped table-responsive table-condensed" style="font-size: 10px; width: auto !important; ">
+<thead>
+<tr>
+<th style="text-align:left;position: sticky; top:0; background-color: #FFFFFF;">
+chr
+</th>
+<th style="text-align:left;position: sticky; top:0; background-color: #FFFFFF;">
+class
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep1.1_mean
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep1.2_mean
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep2.1_mean
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep2.2_mean
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep1_mean
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep2_mean
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep1.1_median
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep1.2_median
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep2.1_median
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep2.2_median
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep1_median
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep2_median
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep1.1_max
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep1.2_max
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep2.1_max
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep2.2_max
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep1_max
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep2_max
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep1.1_sd
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep1.2_sd
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep2.1_sd
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep2.2_sd
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep1_sd
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep2_sd
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep1.1_var
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep1.2_var
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep2.1_var
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep2.2_var
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep1_var
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep2_var
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep1.1_IQR
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep1.2_IQR
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep2.1_IQR
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep2.2_IQR
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep1_IQR
+</th>
+<th style="text-align:right;position: sticky; top:0; background-color: #FFFFFF;">
+score.rep2_IQR
+</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align:left;">
+chrI
+</td>
+<td style="text-align:left;">
+arm
+</td>
+<td style="text-align:right;">
+3.843096
+</td>
+<td style="text-align:right;">
+3.912567
+</td>
+<td style="text-align:right;">
+2.046715
+</td>
+<td style="text-align:right;">
+1.986662
+</td>
+<td style="text-align:right;">
+3.877832
+</td>
+<td style="text-align:right;">
+2.016689
+</td>
+<td style="text-align:right;">
+3.931218
+</td>
+<td style="text-align:right;">
+3.782872
+</td>
+<td style="text-align:right;">
+1.990476
+</td>
+<td style="text-align:right;">
+1.960564
+</td>
+<td style="text-align:right;">
+3.884206
+</td>
+<td style="text-align:right;">
+2.003301
+</td>
+<td style="text-align:right;">
+9.899558
+</td>
+<td style="text-align:right;">
+9.974188
+</td>
+<td style="text-align:right;">
+4.964153
+</td>
+<td style="text-align:right;">
+3.786958
+</td>
+<td style="text-align:right;">
+9.739932
+</td>
+<td style="text-align:right;">
+3.781539
+</td>
+<td style="text-align:right;">
+1.854899
+</td>
+<td style="text-align:right;">
+1.797774
+</td>
+<td style="text-align:right;">
+0.9696974
+</td>
+<td style="text-align:right;">
+0.5685848
+</td>
+<td style="text-align:right;">
+1.613672
+</td>
+<td style="text-align:right;">
+0.5943807
+</td>
+<td style="text-align:right;">
+3.440651
+</td>
+<td style="text-align:right;">
+3.231993
+</td>
+<td style="text-align:right;">
+0.9403130
+</td>
+<td style="text-align:right;">
+0.3232887
+</td>
+<td style="text-align:right;">
+2.603938
+</td>
+<td style="text-align:right;">
+0.3532885
+</td>
+<td style="text-align:right;">
+2.547377
+</td>
+<td style="text-align:right;">
+2.290777
+</td>
+<td style="text-align:right;">
+1.312414
+</td>
+<td style="text-align:right;">
+0.7241780
+</td>
+<td style="text-align:right;">
+2.154019
+</td>
+<td style="text-align:right;">
+0.7995139
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+chrI
+</td>
+<td style="text-align:left;">
+center
+</td>
+<td style="text-align:right;">
+3.789603
+</td>
+<td style="text-align:right;">
+3.809994
+</td>
+<td style="text-align:right;">
+2.255470
+</td>
+<td style="text-align:right;">
+2.216438
+</td>
+<td style="text-align:right;">
+3.799798
+</td>
+<td style="text-align:right;">
+2.235954
+</td>
+<td style="text-align:right;">
+3.734408
+</td>
+<td style="text-align:right;">
+3.816685
+</td>
+<td style="text-align:right;">
+2.211586
+</td>
+<td style="text-align:right;">
+2.215847
+</td>
+<td style="text-align:right;">
+3.790496
+</td>
+<td style="text-align:right;">
+2.216637
+</td>
+<td style="text-align:right;">
+10.786038
+</td>
+<td style="text-align:right;">
+10.677219
+</td>
+<td style="text-align:right;">
+11.024295
+</td>
+<td style="text-align:right;">
+4.524207
+</td>
+<td style="text-align:right;">
+10.633843
+</td>
+<td style="text-align:right;">
+6.430067
+</td>
+<td style="text-align:right;">
+1.666034
+</td>
+<td style="text-align:right;">
+1.627414
+</td>
+<td style="text-align:right;">
+0.9166575
+</td>
+<td style="text-align:right;">
+0.6217335
+</td>
+<td style="text-align:right;">
+1.553801
+</td>
+<td style="text-align:right;">
+0.6494782
+</td>
+<td style="text-align:right;">
+2.775671
+</td>
+<td style="text-align:right;">
+2.648476
+</td>
+<td style="text-align:right;">
+0.8402610
+</td>
+<td style="text-align:right;">
+0.3865526
+</td>
+<td style="text-align:right;">
+2.414299
+</td>
+<td style="text-align:right;">
+0.4218219
+</td>
+<td style="text-align:right;">
+2.292104
+</td>
+<td style="text-align:right;">
+2.242707
+</td>
+<td style="text-align:right;">
+1.118449
+</td>
+<td style="text-align:right;">
+0.7787534
+</td>
+<td style="text-align:right;">
+2.090979
+</td>
+<td style="text-align:right;">
+0.8138055
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+chrII
+</td>
+<td style="text-align:left;">
+arm
+</td>
+<td style="text-align:right;">
+4.870227
+</td>
+<td style="text-align:right;">
+4.913304
+</td>
+<td style="text-align:right;">
+1.957136
+</td>
+<td style="text-align:right;">
+2.001600
+</td>
+<td style="text-align:right;">
+4.891765
+</td>
+<td style="text-align:right;">
+1.979368
+</td>
+<td style="text-align:right;">
+4.800435
+</td>
+<td style="text-align:right;">
+4.805594
+</td>
+<td style="text-align:right;">
+1.922025
+</td>
+<td style="text-align:right;">
+1.967986
+</td>
+<td style="text-align:right;">
+4.821518
+</td>
+<td style="text-align:right;">
+1.953851
+</td>
+<td style="text-align:right;">
+12.451084
+</td>
+<td style="text-align:right;">
+13.172694
+</td>
+<td style="text-align:right;">
+5.058041
+</td>
+<td style="text-align:right;">
+7.682052
+</td>
+<td style="text-align:right;">
+11.238686
+</td>
+<td style="text-align:right;">
+3.841026
+</td>
+<td style="text-align:right;">
+2.365219
+</td>
+<td style="text-align:right;">
+2.141500
+</td>
+<td style="text-align:right;">
+0.9130782
+</td>
+<td style="text-align:right;">
+0.5735206
+</td>
+<td style="text-align:right;">
+2.046613
+</td>
+<td style="text-align:right;">
+0.5427054
+</td>
+<td style="text-align:right;">
+5.594264
+</td>
+<td style="text-align:right;">
+4.586022
+</td>
+<td style="text-align:right;">
+0.8337118
+</td>
+<td style="text-align:right;">
+0.3289259
+</td>
+<td style="text-align:right;">
+4.188625
+</td>
+<td style="text-align:right;">
+0.2945292
+</td>
+<td style="text-align:right;">
+3.227879
+</td>
+<td style="text-align:right;">
+2.920816
+</td>
+<td style="text-align:right;">
+1.126643
+</td>
+<td style="text-align:right;">
+0.6096996
+</td>
+<td style="text-align:right;">
+2.795815
+</td>
+<td style="text-align:right;">
+0.7118429
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+chrII
+</td>
+<td style="text-align:left;">
+center
+</td>
+<td style="text-align:right;">
+4.400471
+</td>
+<td style="text-align:right;">
+4.409252
+</td>
+<td style="text-align:right;">
+2.019725
+</td>
+<td style="text-align:right;">
+1.992072
+</td>
+<td style="text-align:right;">
+4.404861
+</td>
+<td style="text-align:right;">
+2.005898
+</td>
+<td style="text-align:right;">
+4.320392
+</td>
+<td style="text-align:right;">
+4.340475
+</td>
+<td style="text-align:right;">
+1.936472
+</td>
+<td style="text-align:right;">
+1.977904
+</td>
+<td style="text-align:right;">
+4.384544
+</td>
+<td style="text-align:right;">
+1.978199
+</td>
+<td style="text-align:right;">
+11.532385
+</td>
+<td style="text-align:right;">
+11.464162
+</td>
+<td style="text-align:right;">
+5.924825
+</td>
+<td style="text-align:right;">
+3.927414
+</td>
+<td style="text-align:right;">
+9.576897
+</td>
+<td style="text-align:right;">
+3.767396
+</td>
+<td style="text-align:right;">
+2.025486
+</td>
+<td style="text-align:right;">
+1.848068
+</td>
+<td style="text-align:right;">
+0.8854472
+</td>
+<td style="text-align:right;">
+0.5130541
+</td>
+<td style="text-align:right;">
+1.691540
+</td>
+<td style="text-align:right;">
+0.5346732
+</td>
+<td style="text-align:right;">
+4.102595
+</td>
+<td style="text-align:right;">
+3.415355
+</td>
+<td style="text-align:right;">
+0.7840167
+</td>
+<td style="text-align:right;">
+0.2632245
+</td>
+<td style="text-align:right;">
+2.861308
+</td>
+<td style="text-align:right;">
+0.2858755
+</td>
+<td style="text-align:right;">
+2.843563
+</td>
+<td style="text-align:right;">
+2.473610
+</td>
+<td style="text-align:right;">
+1.186243
+</td>
+<td style="text-align:right;">
+0.6700638
+</td>
+<td style="text-align:right;">
+2.331609
+</td>
+<td style="text-align:right;">
+0.6848812
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+chrIII
+</td>
+<td style="text-align:left;">
+arm
+</td>
+<td style="text-align:right;">
+4.050024
+</td>
+<td style="text-align:right;">
+4.106226
+</td>
+<td style="text-align:right;">
+1.895714
+</td>
+<td style="text-align:right;">
+1.849698
+</td>
+<td style="text-align:right;">
+4.078125
+</td>
+<td style="text-align:right;">
+1.872706
+</td>
+<td style="text-align:right;">
+3.904828
+</td>
+<td style="text-align:right;">
+4.017465
+</td>
+<td style="text-align:right;">
+1.798670
+</td>
+<td style="text-align:right;">
+1.875466
+</td>
+<td style="text-align:right;">
+3.978604
+</td>
+<td style="text-align:right;">
+1.851085
+</td>
+<td style="text-align:right;">
+10.369409
+</td>
+<td style="text-align:right;">
+10.971122
+</td>
+<td style="text-align:right;">
+6.095012
+</td>
+<td style="text-align:right;">
+3.298643
+</td>
+<td style="text-align:right;">
+9.520216
+</td>
+<td style="text-align:right;">
+4.077162
+</td>
+<td style="text-align:right;">
+2.219816
+</td>
+<td style="text-align:right;">
+2.042417
+</td>
+<td style="text-align:right;">
+0.9939509
+</td>
+<td style="text-align:right;">
+0.5369132
+</td>
+<td style="text-align:right;">
+1.914232
+</td>
+<td style="text-align:right;">
+0.6038903
+</td>
+<td style="text-align:right;">
+4.927585
+</td>
+<td style="text-align:right;">
+4.171467
+</td>
+<td style="text-align:right;">
+0.9879384
+</td>
+<td style="text-align:right;">
+0.2882758
+</td>
+<td style="text-align:right;">
+3.664284
+</td>
+<td style="text-align:right;">
+0.3646835
+</td>
+<td style="text-align:right;">
+2.954187
+</td>
+<td style="text-align:right;">
+2.942814
+</td>
+<td style="text-align:right;">
+1.133781
+</td>
+<td style="text-align:right;">
+0.6434204
+</td>
+<td style="text-align:right;">
+2.406939
+</td>
+<td style="text-align:right;">
+0.7125093
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+chrIII
+</td>
+<td style="text-align:left;">
+center
+</td>
+<td style="text-align:right;">
+4.086331
+</td>
+<td style="text-align:right;">
+4.131890
+</td>
+<td style="text-align:right;">
+1.975429
+</td>
+<td style="text-align:right;">
+1.964769
+</td>
+<td style="text-align:right;">
+4.109111
+</td>
+<td style="text-align:right;">
+1.970099
+</td>
+<td style="text-align:right;">
+3.937482
+</td>
+<td style="text-align:right;">
+3.932744
+</td>
+<td style="text-align:right;">
+1.926985
+</td>
+<td style="text-align:right;">
+1.935541
+</td>
+<td style="text-align:right;">
+4.024518
+</td>
+<td style="text-align:right;">
+1.943290
+</td>
+<td style="text-align:right;">
+14.610110
+</td>
+<td style="text-align:right;">
+19.681383
+</td>
+<td style="text-align:right;">
+6.046278
+</td>
+<td style="text-align:right;">
+7.798891
+</td>
+<td style="text-align:right;">
+17.145747
+</td>
+<td style="text-align:right;">
+3.959039
+</td>
+<td style="text-align:right;">
+1.954548
+</td>
+<td style="text-align:right;">
+1.925722
+</td>
+<td style="text-align:right;">
+0.9330566
+</td>
+<td style="text-align:right;">
+0.5544198
+</td>
+<td style="text-align:right;">
+1.729980
+</td>
+<td style="text-align:right;">
+0.5575613
+</td>
+<td style="text-align:right;">
+3.820259
+</td>
+<td style="text-align:right;">
+3.708404
+</td>
+<td style="text-align:right;">
+0.8705945
+</td>
+<td style="text-align:right;">
+0.3073814
+</td>
+<td style="text-align:right;">
+2.992830
+</td>
+<td style="text-align:right;">
+0.3108746
+</td>
+<td style="text-align:right;">
+2.400475
+</td>
+<td style="text-align:right;">
+2.374761
+</td>
+<td style="text-align:right;">
+1.228305
+</td>
+<td style="text-align:right;">
+0.7115937
+</td>
+<td style="text-align:right;">
+2.132365
+</td>
+<td style="text-align:right;">
+0.7175691
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+chrIV
+</td>
+<td style="text-align:left;">
+arm
+</td>
+<td style="text-align:right;">
+4.555275
+</td>
+<td style="text-align:right;">
+4.452992
+</td>
+<td style="text-align:right;">
+1.882396
+</td>
+<td style="text-align:right;">
+1.890967
+</td>
+<td style="text-align:right;">
+4.504134
+</td>
+<td style="text-align:right;">
+1.886681
+</td>
+<td style="text-align:right;">
+4.593153
+</td>
+<td style="text-align:right;">
+4.246830
+</td>
+<td style="text-align:right;">
+1.862930
+</td>
+<td style="text-align:right;">
+1.922190
+</td>
+<td style="text-align:right;">
+4.464999
+</td>
+<td style="text-align:right;">
+1.853592
+</td>
+<td style="text-align:right;">
+13.177409
+</td>
+<td style="text-align:right;">
+11.581824
+</td>
+<td style="text-align:right;">
+5.755199
+</td>
+<td style="text-align:right;">
+3.615222
+</td>
+<td style="text-align:right;">
+12.379616
+</td>
+<td style="text-align:right;">
+3.740202
+</td>
+<td style="text-align:right;">
+2.325785
+</td>
+<td style="text-align:right;">
+2.175698
+</td>
+<td style="text-align:right;">
+0.9558563
+</td>
+<td style="text-align:right;">
+0.5861836
+</td>
+<td style="text-align:right;">
+2.009544
+</td>
+<td style="text-align:right;">
+0.5843154
+</td>
+<td style="text-align:right;">
+5.409278
+</td>
+<td style="text-align:right;">
+4.733660
+</td>
+<td style="text-align:right;">
+0.9136613
+</td>
+<td style="text-align:right;">
+0.3436112
+</td>
+<td style="text-align:right;">
+4.038266
+</td>
+<td style="text-align:right;">
+0.3414245
+</td>
+<td style="text-align:right;">
+3.274683
+</td>
+<td style="text-align:right;">
+3.023223
+</td>
+<td style="text-align:right;">
+1.302876
+</td>
+<td style="text-align:right;">
+0.7958036
+</td>
+<td style="text-align:right;">
+2.857441
+</td>
+<td style="text-align:right;">
+0.7624962
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+chrIV
+</td>
+<td style="text-align:left;">
+center
+</td>
+<td style="text-align:right;">
+4.579706
+</td>
+<td style="text-align:right;">
+4.557815
+</td>
+<td style="text-align:right;">
+2.021764
+</td>
+<td style="text-align:right;">
+2.022928
+</td>
+<td style="text-align:right;">
+4.568761
+</td>
+<td style="text-align:right;">
+2.022346
+</td>
+<td style="text-align:right;">
+4.411362
+</td>
+<td style="text-align:right;">
+4.505222
+</td>
+<td style="text-align:right;">
+1.944574
+</td>
+<td style="text-align:right;">
+1.996153
+</td>
+<td style="text-align:right;">
+4.445865
+</td>
+<td style="text-align:right;">
+2.001898
+</td>
+<td style="text-align:right;">
+12.786151
+</td>
+<td style="text-align:right;">
+13.141258
+</td>
+<td style="text-align:right;">
+6.491957
+</td>
+<td style="text-align:right;">
+4.064417
+</td>
+<td style="text-align:right;">
+12.220949
+</td>
+<td style="text-align:right;">
+4.312361
+</td>
+<td style="text-align:right;">
+2.195687
+</td>
+<td style="text-align:right;">
+2.105265
+</td>
+<td style="text-align:right;">
+1.0221034
+</td>
+<td style="text-align:right;">
+0.5599524
+</td>
+<td style="text-align:right;">
+1.933453
+</td>
+<td style="text-align:right;">
+0.6002870
+</td>
+<td style="text-align:right;">
+4.821042
+</td>
+<td style="text-align:right;">
+4.432141
+</td>
+<td style="text-align:right;">
+1.0446954
+</td>
+<td style="text-align:right;">
+0.3135467
+</td>
+<td style="text-align:right;">
+3.738241
+</td>
+<td style="text-align:right;">
+0.3603444
+</td>
+<td style="text-align:right;">
+2.970043
+</td>
+<td style="text-align:right;">
+2.654568
+</td>
+<td style="text-align:right;">
+1.266250
+</td>
+<td style="text-align:right;">
+0.6924404
+</td>
+<td style="text-align:right;">
+2.480495
+</td>
+<td style="text-align:right;">
+0.7373730
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+chrV
+</td>
+<td style="text-align:left;">
+arm
+</td>
+<td style="text-align:right;">
+5.191761
+</td>
+<td style="text-align:right;">
+5.184205
+</td>
+<td style="text-align:right;">
+2.051527
+</td>
+<td style="text-align:right;">
+1.987846
+</td>
+<td style="text-align:right;">
+5.187983
+</td>
+<td style="text-align:right;">
+2.019686
+</td>
+<td style="text-align:right;">
+5.032404
+</td>
+<td style="text-align:right;">
+5.087150
+</td>
+<td style="text-align:right;">
+1.934011
+</td>
+<td style="text-align:right;">
+1.967138
+</td>
+<td style="text-align:right;">
+5.109361
+</td>
+<td style="text-align:right;">
+1.982528
+</td>
+<td style="text-align:right;">
+13.492183
+</td>
+<td style="text-align:right;">
+11.507918
+</td>
+<td style="text-align:right;">
+5.035170
+</td>
+<td style="text-align:right;">
+3.481420
+</td>
+<td style="text-align:right;">
+11.397293
+</td>
+<td style="text-align:right;">
+3.927971
+</td>
+<td style="text-align:right;">
+2.287602
+</td>
+<td style="text-align:right;">
+2.138466
+</td>
+<td style="text-align:right;">
+0.8761666
+</td>
+<td style="text-align:right;">
+0.5236909
+</td>
+<td style="text-align:right;">
+1.942810
+</td>
+<td style="text-align:right;">
+0.5373145
+</td>
+<td style="text-align:right;">
+5.233125
+</td>
+<td style="text-align:right;">
+4.573035
+</td>
+<td style="text-align:right;">
+0.7676680
+</td>
+<td style="text-align:right;">
+0.2742521
+</td>
+<td style="text-align:right;">
+3.774511
+</td>
+<td style="text-align:right;">
+0.2887069
+</td>
+<td style="text-align:right;">
+3.048026
+</td>
+<td style="text-align:right;">
+2.715601
+</td>
+<td style="text-align:right;">
+1.183401
+</td>
+<td style="text-align:right;">
+0.6841582
+</td>
+<td style="text-align:right;">
+2.509539
+</td>
+<td style="text-align:right;">
+0.7252960
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+chrV
+</td>
+<td style="text-align:left;">
+center
+</td>
+<td style="text-align:right;">
+5.042526
+</td>
+<td style="text-align:right;">
+5.030857
+</td>
+<td style="text-align:right;">
+2.033645
+</td>
+<td style="text-align:right;">
+2.038037
+</td>
+<td style="text-align:right;">
+5.036691
+</td>
+<td style="text-align:right;">
+2.035841
+</td>
+<td style="text-align:right;">
+4.948876
+</td>
+<td style="text-align:right;">
+4.954190
+</td>
+<td style="text-align:right;">
+1.992806
+</td>
+<td style="text-align:right;">
+2.029107
+</td>
+<td style="text-align:right;">
+4.928897
+</td>
+<td style="text-align:right;">
+2.019057
+</td>
+<td style="text-align:right;">
+18.877129
+</td>
+<td style="text-align:right;">
+14.775247
+</td>
+<td style="text-align:right;">
+7.413114
+</td>
+<td style="text-align:right;">
+4.267522
+</td>
+<td style="text-align:right;">
+16.826188
+</td>
+<td style="text-align:right;">
+4.359294
+</td>
+<td style="text-align:right;">
+2.351288
+</td>
+<td style="text-align:right;">
+2.164785
+</td>
+<td style="text-align:right;">
+0.9510962
+</td>
+<td style="text-align:right;">
+0.5496057
+</td>
+<td style="text-align:right;">
+2.005313
+</td>
+<td style="text-align:right;">
+0.5627028
+</td>
+<td style="text-align:right;">
+5.528557
+</td>
+<td style="text-align:right;">
+4.686293
+</td>
+<td style="text-align:right;">
+0.9045840
+</td>
+<td style="text-align:right;">
+0.3020665
+</td>
+<td style="text-align:right;">
+4.021279
+</td>
+<td style="text-align:right;">
+0.3166345
+</td>
+<td style="text-align:right;">
+2.945633
+</td>
+<td style="text-align:right;">
+2.657416
+</td>
+<td style="text-align:right;">
+1.266866
+</td>
+<td style="text-align:right;">
+0.7260076
+</td>
+<td style="text-align:right;">
+2.563525
+</td>
+<td style="text-align:right;">
+0.7266567
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+chrX
+</td>
+<td style="text-align:left;">
+arm
+</td>
+<td style="text-align:right;">
+4.350278
+</td>
+<td style="text-align:right;">
+4.497420
+</td>
+<td style="text-align:right;">
+1.987392
+</td>
+<td style="text-align:right;">
+1.937906
+</td>
+<td style="text-align:right;">
+4.423849
+</td>
+<td style="text-align:right;">
+1.962649
+</td>
+<td style="text-align:right;">
+4.149796
+</td>
+<td style="text-align:right;">
+4.428384
+</td>
+<td style="text-align:right;">
+1.896610
+</td>
+<td style="text-align:right;">
+1.914586
+</td>
+<td style="text-align:right;">
+4.367801
+</td>
+<td style="text-align:right;">
+1.946996
+</td>
+<td style="text-align:right;">
+13.158103
+</td>
+<td style="text-align:right;">
+11.071704
+</td>
+<td style="text-align:right;">
+5.953438
+</td>
+<td style="text-align:right;">
+4.372796
+</td>
+<td style="text-align:right;">
+11.094221
+</td>
+<td style="text-align:right;">
+4.439559
+</td>
+<td style="text-align:right;">
+2.192431
+</td>
+<td style="text-align:right;">
+2.108680
+</td>
+<td style="text-align:right;">
+0.9516055
+</td>
+<td style="text-align:right;">
+0.5071152
+</td>
+<td style="text-align:right;">
+1.916573
+</td>
+<td style="text-align:right;">
+0.5489795
+</td>
+<td style="text-align:right;">
+4.806752
+</td>
+<td style="text-align:right;">
+4.446532
+</td>
+<td style="text-align:right;">
+0.9055530
+</td>
+<td style="text-align:right;">
+0.2571658
+</td>
+<td style="text-align:right;">
+3.673252
+</td>
+<td style="text-align:right;">
+0.3013785
+</td>
+<td style="text-align:right;">
+2.944121
+</td>
+<td style="text-align:right;">
+2.742026
+</td>
+<td style="text-align:right;">
+1.221841
+</td>
+<td style="text-align:right;">
+0.6590212
+</td>
+<td style="text-align:right;">
+2.603868
+</td>
+<td style="text-align:right;">
+0.6912009
+</td>
+</tr>
+<tr>
+<td style="text-align:left;">
+chrX
+</td>
+<td style="text-align:left;">
+center
+</td>
+<td style="text-align:right;">
+4.286939
+</td>
+<td style="text-align:right;">
+4.300419
+</td>
+<td style="text-align:right;">
+1.994620
+</td>
+<td style="text-align:right;">
+1.932014
+</td>
+<td style="text-align:right;">
+4.293679
+</td>
+<td style="text-align:right;">
+1.963317
+</td>
+<td style="text-align:right;">
+4.215019
+</td>
+<td style="text-align:right;">
+4.173799
+</td>
+<td style="text-align:right;">
+1.946141
+</td>
+<td style="text-align:right;">
+1.919459
+</td>
+<td style="text-align:right;">
+4.192171
+</td>
+<td style="text-align:right;">
+1.936142
+</td>
+<td style="text-align:right;">
+12.446734
+</td>
+<td style="text-align:right;">
+11.963962
+</td>
+<td style="text-align:right;">
+5.956284
+</td>
+<td style="text-align:right;">
+4.050921
+</td>
+<td style="text-align:right;">
+11.147473
+</td>
+<td style="text-align:right;">
+4.476642
+</td>
+<td style="text-align:right;">
+2.056084
+</td>
+<td style="text-align:right;">
+1.937436
+</td>
+<td style="text-align:right;">
+0.9067872
+</td>
+<td style="text-align:right;">
+0.4988611
+</td>
+<td style="text-align:right;">
+1.759999
+</td>
+<td style="text-align:right;">
+0.5414329
+</td>
+<td style="text-align:right;">
+4.227481
+</td>
+<td style="text-align:right;">
+3.753657
+</td>
+<td style="text-align:right;">
+0.8222630
+</td>
+<td style="text-align:right;">
+0.2488624
+</td>
+<td style="text-align:right;">
+3.097595
+</td>
+<td style="text-align:right;">
+0.2931495
+</td>
+<td style="text-align:right;">
+2.780918
+</td>
+<td style="text-align:right;">
+2.560351
+</td>
+<td style="text-align:right;">
+1.220483
+</td>
+<td style="text-align:right;">
+0.6652606
+</td>
+<td style="text-align:right;">
+2.388910
+</td>
+<td style="text-align:right;">
+0.7217678
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+<div id="visualizing" class="section level3">
+<h3>3. Visualizing</h3>
+<pre class="r"><code>joint_wide %&gt;% select(starts_with(&quot;score&quot;)) %&gt;% cor(use = &quot;pair&quot;) %&gt;% 
+    as.data.frame() %&gt;% rownames_to_column(&quot;var1&quot;) %&gt;% pivot_longer(-1, 
+    names_to = &quot;var2&quot;, values_to = &quot;correlation&quot;) %&gt;% ggplot(aes(x = var1, 
+    y = var2, fill = correlation)) + geom_tile() + scale_fill_gradient2(low = &quot;red&quot;, 
+    mid = &quot;white&quot;, high = &quot;blue&quot;) + geom_text(aes(label = round(correlation, 
+    2)), color = &quot;black&quot;, size = 4) + theme(axis.text.x = element_text(angle = 90, 
+    hjust = 1)) + theme_bw() + coord_fixed() + labs(title = &quot;Correlation of Contact Scores&quot;, 
+    x = &quot;&quot;, y = &quot;&quot;)</code></pre>
+<p><img src="../../project/project1_files/figure-html/correlation%20heatmap-1.png" width="672" style="display: block; margin: auto;" /></p>
+<p><em>Correlations between datasets were plotted. Correlations between all datasets are positive. However, the correlations are very low, perhaps much more so than would be expected between replicates. Interestingly, the correlation between datasets within the same replicates are much lower than expected, especially for replicate 2.</em></p>
+<pre class="r"><code>joint_long %&gt;% ggplot(aes(x = dataset, y = score, color = replicate)) + 
+    geom_violin() + stat_summary(fun.data = &quot;mean_sdl&quot;, mult = 1, 
+    geom = &quot;pointrange&quot;) + theme_bw() + labs(title = &quot;Distribution of Contact Scores&quot;, 
+    subtitle = &quot;rDNA vs. All&quot;, x = &quot;Replicate and dataset&quot;, y = &quot;rDNA contact score&quot;) + 
+    scale_color_brewer(palette = &quot;Paired&quot;) + scale_y_continuous(breaks = seq(0, 
+    20, 2.5))</code></pre>
+<p><img src="../../project/project1_files/figure-html/violin%20plots-1.png" width="672" style="display: block; margin: auto;" /></p>
+<p><em>Violin plots were generated for each replicate and each dataset. Summary statistics of mean +/- one standard deviation are also plotted. All datasets are positively skewed. As expected from the summary statistics, the datasets are similar within replicates, but replicate 1 has a consistently higher contact score than replicate 2. Dataset 3 looks like it is potentially bimodal.</em></p>
+<pre class="r"><code>joint_wide %&gt;% rowwise() %&gt;% mutate(rep1_avg = mean(c(score.rep1.1, 
+    score.rep1.2))) %&gt;% rowwise() %&gt;% mutate(rep2_avg = mean(c(score.rep2.1, 
+    score.rep2.2))) %&gt;% ggplot(aes(x = rep1_avg, y = rep2_avg)) + 
+    geom_point(aes(color = chr), alpha = 0.1) + geom_smooth(method = lm, 
+    se = FALSE) + lims(x = c(0, 20), y = c(0, 20)) + coord_fixed() + 
+    theme_bw() + labs(title = &quot;rDNA Contacts&quot;, subtitle = &quot;rDNA vs. All&quot;, 
+    x = &quot;Contact score - Replicate 1&quot;, y = &quot;Contact score - Replicate 2&quot;) + 
+    scale_color_brewer(palette = &quot;Set3&quot;)</code></pre>
+<p><img src="../../project/project1_files/figure-html/rep2%20avg%20vs%20rep1%20avg-1.png" width="672" style="display: block; margin: auto;" /></p>
+<p><em>Average contact scores for each bin were compared across replicates and colored by chromosome. As expected from the summary statistics, correlation plot, and the violin plot, there is a bias toward replicate 1. The positive correlation between the average contact scores of these replicates is weak.</em></p>
+</div>
+<div id="dimensionality-reduction---pam-clustering" class="section level3">
+<h3>4. Dimensionality Reduction - PAM Clustering</h3>
+<pre class="r"><code>joint_clust &lt;- joint_wide %&gt;% select(starts_with(&quot;score&quot;)) %&gt;% 
+    scale %&gt;% glimpse()</code></pre>
+<pre><code>##  num [1:9990, 1:4] 0.373 0.308 -0.766 0.827 0.799 ...
+##  - attr(*, &quot;dimnames&quot;)=List of 2
+##   ..$ : NULL
+##   ..$ : chr [1:4] &quot;score.rep1.1&quot; &quot;score.rep1.2&quot; &quot;score.rep2.1&quot; &quot;score.rep2.2&quot;
+##  - attr(*, &quot;scaled:center&quot;)= Named num [1:4] 4.44 4.46 2.02 2
+##   ..- attr(*, &quot;names&quot;)= chr [1:4] &quot;score.rep1.1&quot; &quot;score.rep1.2&quot; &quot;score.rep2.1&quot; &quot;score.rep2.2&quot;
+##  - attr(*, &quot;scaled:scale&quot;)= Named num [1:4] 2.166 2.041 0.944 0.557
+##   ..- attr(*, &quot;names&quot;)= chr [1:4] &quot;score.rep1.1&quot; &quot;score.rep1.2&quot; &quot;score.rep2.1&quot; &quot;score.rep2.2&quot;</code></pre>
+<pre class="r"><code># sil_width&lt;-vector() for(i in 2:5){ pam_fit &lt;-
+# pam(joint_clust, k = i) sil_width[i] &lt;-
+# pam_fit$silinfo$avg.width } ggplot() +
+# geom_line(aes(x=1:5,y=sil_width)) +
+# scale_x_continuous(name=&#39;k&#39;,breaks=1:5)</code></pre>
+<p><em>Silhouette width vs. k took a very long time to run. In the interest of time, I am commenting out the code and adding an image of the plot here so that the document does not take forever to knit.</em></p>
+<div class="figure">
+<img src="../../stor/home/tff246/personal/projects/project1/silhouette_width.png" alt="" />
+<p class="caption">Silhouette width vs. k</p>
+</div>
+<pre class="r"><code>pam1 &lt;- joint_clust %&gt;% pam(2)</code></pre>
+<pre class="r"><code>pamclust &lt;- joint_wide %&gt;% mutate(cluster = as.factor(pam1$clustering))
+
+pamclust %&gt;% ggplot(aes(x = score.rep1.1, y = score.rep1.2, color = cluster)) + 
+    geom_point()</code></pre>
+<p><img src="../../project/project1_files/figure-html/unnamed-chunk-5-1.png" width="672" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>pamclust %&gt;% ggplot(aes(x = score.rep2.1, y = score.rep2.2, color = cluster)) + 
+    geom_point()</code></pre>
+<p><img src="../../project/project1_files/figure-html/unnamed-chunk-5-2.png" width="672" style="display: block; margin: auto;" /></p>
+<pre class="r"><code>pamclust %&gt;% ggplot(aes(x = score.rep1.1, y = score.rep2.1, color = cluster)) + 
+    geom_point()</code></pre>
+<p><img src="../../project/project1_files/figure-html/unnamed-chunk-5-3.png" width="672" style="display: block; margin: auto;" /></p>
+<p><em>I performed PAM clustering for dimensionality reduction. I chose two clusters since there is a pretty steep dropoff of silhouette width from 2 to fewer clusters. Only 2 to 5 clusters were tested for silhouette since the datasets are so large - any more took a prohibitively long time to run. The average silhouette width was low, around 0.23. This is very low and indicates that there is not a substantial underlying structure that has been found by the clustering analysis. Visualizing the clusters seems like I have only managed to differentiate the data based on whether they have a high or low contact score in replicate 1. The goodness-of-fit is poor enough that not much more can be taken from this clustering analysis.</em></p>
+<pre class="r"><code>## paste this chunk into the ```{r setup} chunk at the top of
+## your project 1 .Rmd file
+
+knitr::opts_chunk$set(echo = TRUE, eval = TRUE, fig.align = &quot;center&quot;, 
+    warning = F, message = F, tidy = TRUE, tidy.opts = list(width.cutoff = 60), 
+    R.options = list(max.print = 100))</code></pre>
+</div>
+</div>
+
+            
+        <hr>         <div class="related-posts">
+                <h5>Related Posts</h5>
+                
+              </div> 
+            </div>
+          </div>
+
+   <hr>  <div class="disqus">
+  <div id="disqus_thread"></div>
+  <script type="text/javascript">
+
+    (function() {
+      
+      
+      if (window.location.hostname == "localhost")
+        return;
+
+      var disqus_shortname = '';
+      var dsq = document.createElement('script'); dsq.type = 'text/javascript'; dsq.async = true;
+      dsq.src = '//' + disqus_shortname + '.disqus.com/embed.js';
+      (document.getElementsByTagName('head')[0] || document.getElementsByTagName('body')[0]).appendChild(dsq);
+    })();
+  </script>
+  <noscript>Please enable JavaScript to view the <a href="http://disqus.com/?ref_noscript">comments powered by Disqus.</a></noscript>
+  <a href="http://disqus.com/" class="dsq-brlink">comments powered by <span class="logo-disqus">Disqus</span></a>
+</div> 
+        </div>
+      </div>
+    </div>
+
+    
+    <footer>
+  <div id="footer">
+    <div class="container">
+      <p class="text-muted">&copy; All rights reserved. Powered by <a href="https://gohugo.io/">Hugo</a> and
+      <a href="http://www.github.com/nurlansu/hugo-sustain/">sustain</a> with ♥</p>
+    </div>
+  </div>
+</footer>
+<div class="footer"></div>
+
+
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
+
+<script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha384-Tc5IQib027qvyjSMfHjOMaLkfuWVxZxUPnCJA7l2mCWNIpG9mGCD8wGNIcPD7Txa" crossorigin="anonymous"></script>
+<script src="../../js/docs.min.js"></script>
+<script src="../../js/main.js"></script>
+
+<script src="../../js/ie10-viewport-bug-workaround.js"></script>
+
+
+    
+  </body>
+</html>
