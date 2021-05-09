@@ -1,0 +1,29 @@
+---
+title: Nonsense post
+author: Trevor F. Freeman
+date: '2021-05-08'
+slug: nonsense-post
+categories: []
+tags: []
+description: ''
+---
+
+It seems like someone in my apartment constantly has a car alarm going off, and they have the hardest time getting it turned off. This just happened pretty late at night, and I was afraid my dog was going to start barking at the sudden noise. Thankfully she stayed quiet, but she was definitely annoyed. I feel you girl - if I could make it stop I definitely would.
+
+[Link to project 1](../project/project1.html)
+
+[Link to google](https://www.google.com)
+
+```{r}
+### R code chunk
+cat('lets print something in R')
+```
+
+```{r}
+library(reticulate)
+```
+
+```{python}
+print("whoa, you can run python too!")
+```
+
