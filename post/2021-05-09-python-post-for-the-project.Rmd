@@ -108,6 +108,10 @@ ggplot() +
   labs(title = 'Distribution of y')
 ```
 
+Sweet, everything looks just as it should!
+
+Hopefully this serves as a useful (albeit simple) guide for how to pair R and python in an Rmarkdown document to carryout whatever data analysis needs you have.
+
 ### Acknowledgments
 
 This post wouldn't have been possible without Third Coast Coffee. They're not a sponsor, but I wouldn't have gotten through this semester without a ton of their Ethiopian Yrgichaffe.
